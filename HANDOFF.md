@@ -74,13 +74,19 @@ run_sweep.sh（顺序扫 0.1 0.01，fail-fast）
 
 **完成判定 = `.complete` 存在**（不是 coin_metrics.json 存在）。
 
-## 5. 当前进度（2026-09-01）
+## 5. 当前进度（2026-09-01 工程加固完成）
 
-- ✅ 立项侦察 + 实验设计确认（2 组：0.1 / 0.01）
-- ✅ 本地改造完成：Replay 编排/聚合脚本、官方脚本 bug 修复（layground 拼写、merge conflict、
-  chencheng 硬编码路径、git+ssh 依赖）、文档三件套（待 push 到 fork）
-- ⏳ 待办：push 到 GitHub → 租卡（4×A100 + ≥500G 盘）→ 云端装环境 → 数据/模型下载 →
-  图片完整性核对 → 冒烟（极小数据）→ canary（0.1 的 round1 ScienceQA）→ 正式 sweep
+- ✅ 立项侦察 + 实验设计确认（2 组：0.1 / 0.01，prefix replay，与 TRACE 口径一致）
+- ✅ 第一轮本地改造 + 推送 fork：commit `855bfb2`（GitHub 当前 HEAD）
+- ✅ 第二轮工程加固（工单 1-9）：commit `6ff09a5`（**仅本地，未 push**——用户约束）
+  - 修复：目录契约、mm_projector_lr 失效、zero3_offload 顶掉 cosine、上游 8 处 merge conflict、
+    eval chunk 吞错、checkpoint 链、manifest/恢复校验、preflight、分辨率报告（详见 EXPERIMENT_LOG 3 节）
+  - 门禁 A 全绿：bash -n + py_compile + **46/46 单测**（`bash scripts/CoIN_Replay/run_tests.sh`）
+  - 端到端 DRY_RUN 全链路验证通过（含故障注入）
+- ⏸ **阻塞：canary B-E 需 4×A100 云端实例**（ebcloud 32433 当前拒连，未租卡）
+  - canary.sh 已就绪：`bash scripts/CoIN_Replay/canary.sh`（A 本地可跑；B-E 云端）
+- ⏳ 待办：租卡（4×A100 80G + ≥500G 盘）→ 云端装环境（requirements_coin.txt）→ 数据/模型下载 →
+  图片完整性 preflight → canary.sh 全过 → 正式 sweep（0.1 → 0.01）
 
 ## 6. 已修复的问题（相对上游 41411ab）
 
@@ -108,21 +114,27 @@ run_sweep.sh（顺序扫 0.1 0.01，fail-fast）
 ## 8. 恢复实验的操作步骤（实例恢复后）
 
 ```bash
-# 1. clone / pull 仓库
+# 1. clone / pull 仓库（GitHub 当前 855bfb2；本地加固 6ff09a5 未 push，
+#    云端用 855bfb2 起步后若需加固代码，把本地 6ff09a5 的 diff 同步过去）
 git clone https://github.com/VincentAshton/CoIN.git && cd CoIN
 
-# 2. 环境（见 RUNBOOK 第 3 节）——老栈，装完跑一次 import 冒烟
+# 2. 环境（RUNBOOK 第 3 节 + scripts/CoIN_Replay/env/requirements_coin.txt）——老栈，装完冒烟
 python -c "import torch, transformers, deepspeed, peft; print(torch.__version__, transformers.__version__)"
 
-# 3. 模型三件套 + 指令数据 + 图片（RUNBOOK 3.3-3.5）；核对图片完整性
+# 3. 模型三件套 + 指令数据 + 图片（RUNBOOK 3.3-3.5）；preflight 核对图片完整性
+python scripts/CoIN_Replay/preflight_data.py --data-dir playground/Instructions_Original \
+    --image-dir cl_dataset --out-report results/CoIN_Replay/preflight_report.json
 
-# 4. 单任务冒烟（极小数据：把 ScienceQA train.json 截 50 条 → 1 卡 1 epoch）
-#    再 canary：bash scripts/CoIN_Replay/run_replay_exp.sh 0.1（round1 即 ScienceQA 全量）
+# 4. 零 GPU 门禁（可在任何机器先跑）
+bash scripts/CoIN_Replay/run_tests.sh
 
-# 5. 正式：bash scripts/CoIN_Replay/run_sweep.sh 0.1 0.01
-#    断点续跑：脚本自动跳过 .round<j>_done / .complete 的已完成部分
+# 5. canary（4×A100，全部通过才允许正式 sweep）
+bash scripts/CoIN_Replay/canary.sh
 
-# 6. 每组完成立即校验 coin_metrics.json + 拉回本地 + 回填 EXPERIMENT_LOG
+# 6. 正式 sweep（不混配置；0.01 round2 replay 是单 step，需显式确认）
+ENFORCE_MIN_STEPS=1 ALLOW_SINGLE_STEP_REPLAY=1 bash scripts/CoIN_Replay/run_sweep.sh 0.1 0.01
+
+# 7. 每组完成立即校验 coin_metrics.json + 拉回本地 + 回填 EXPERIMENT_LOG
 ```
 
 ## 9. 关键约束（务必遵守）

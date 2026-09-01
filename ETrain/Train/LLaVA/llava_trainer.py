@@ -284,7 +284,6 @@ def load_model_from_previous_task(model, model_args):
         from peft.utils import WEIGHTS_NAME,set_peft_model_state_dict
         print('Loading LoRA weights...')
     else:
-        sys.path.append('/home/chencheng/Code/Slim_Train')
         from CoIN.peft import PeftModel, TaskType, get_peft_model, CoINMOELoraConfig, WEIGHTS_NAME, set_peft_model_state_dict
             
     filename = os.path.join(previous_task_model_path, WEIGHTS_NAME)

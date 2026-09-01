@@ -1,7 +1,4 @@
 bash ./scripts/Eval_GeneralKnowledge/eval_prompt.sh \
-<<<<<<< HEAD
-    ./results/CoIN/ScienceQA/Finetune \
-=======
     ./results/CoIN/LLaVA-10Typev2/ScienceQA/Finetune \
 
 bash ./scripts/Eval_GeneralKnowledge/eval_prompt.sh \
@@ -361,4 +358,3 @@ bash ./scripts/Eval_GeneralKnowledge/eval_prompt.sh \
 
 bash ./scripts/Eval_GeneralKnowledge/eval_prompt_slim_llava.sh
 bash ./scripts/Eval_GeneralKnowledge/eval_prompt_slim_minigpt.sh
->>>>>>> aa77c0569e0888415820a676fd218fa14b7d8142

@@ -17,13 +17,13 @@ else
     MODELPATH=$2
 fi
 
-RESULT_DIR="./results/CoIN/LLaVA/ImageNet"
+RESULT_DIR="${RESULT_DIR:-./results/CoIN/LLaVA/ImageNet}"
 
 for IDX in $(seq 0 $((CHUNKS-1))); do
     CUDA_VISIBLE_DEVICES=${GPULIST[$IDX]} python -m ETrain.Eval.LLaVA.CoIN.model_vqa \
         --model-path $MODELPATH \
         --model-base ./checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5 \
-        --question-file ./layground/Instructions_Original/ImageNet/test.json \
+        --question-file ./playground/Instructions_Original/ImageNet/test.json \
         --image-folder ./cl_dataset \
         --answers-file $RESULT_DIR/$STAGE/${CHUNKS}_${IDX}.jsonl \
         --num-chunks $CHUNKS \
@@ -34,14 +34,14 @@ done
 
 wait
 
-output_file=$RESULT_DIR//$STAGE/merge.jsonl
+output_file=$RESULT_DIR/$STAGE/merge.jsonl
 
 # Clear out the output file if it exists.
 > "$output_file"
 
 # Loop through the indices and concatenate each file.
 for IDX in $(seq 0 $((CHUNKS-1))); do
-    cat $RESULT_DIR//$STAGE/${CHUNKS}_${IDX}.jsonl >> "$output_file"
+    cat $RESULT_DIR/$STAGE/${CHUNKS}_${IDX}.jsonl >> "$output_file"
 done
 
 python -m ETrain.Eval.LLaVA.CoIN.eval_ImagetNet \
@@ -49,7 +49,9 @@ python -m ETrain.Eval.LLaVA.CoIN.eval_ImagetNet \
     --result-file $output_file \
     --output-dir $RESULT_DIR/$STAGE \
 
-python -m ETrain.Eval.LLaVA.CoIN.create_prompt \
+if ! python -m ETrain.Eval.LLaVA.CoIN.create_prompt \
     --rule ./ETrain/Eval/LLaVA/CoIN/rule.json \
     --questions ./playground/Instructions_Original/ImageNet/test.json \
-    --results $output_file \
+    --results $output_file; then
+    echo "[eval] create_prompt 失败（仅 Reasoning Capability 评估需要，可跳过），继续"
+fi

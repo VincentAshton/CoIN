@@ -19,7 +19,9 @@ deepspeed==0.14.0
 docker-pycreds==0.4.0
 einops==0.6.1
 einops-exts==0.0.4
--e git+ssh://git@github.com/zackschen/Easy_Train_MLLM.git@aa77c0569e0888415820a676fd218fa14b7d8142#egg=ETrain
+# ETrain 代码已 vendored 在仓库 ETrain/ 目录下，无需从作者的私有仓库安装。
+# 原行（需要作者的 SSH 权限，普通用户装不了）：
+# -e git+ssh://git@github.com/zackschen/Easy_Train_MLLM.git@aa77c0569e0888415820a676fd218fa14b7d8142#egg=ETrain
 exceptiongroup==1.2.0
 fairscale==0.4.13
 fastapi==0.110.1

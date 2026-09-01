@@ -17,8 +17,6 @@ from ETrain.Train.LLaVA.llava_trainer import LLaVATrainer
 from ETrain.Train.Base_trainer import *
 from peft.utils import WEIGHTS_NAME, set_peft_model_state_dict
 
-import sys
-sys.path.append('/home/chencheng/Code/Slim_Train')
 from CoIN.peft import PeftModel, TaskType, get_peft_model, CoINMOELoraConfig, WEIGHTS_NAME, set_peft_model_state_dict
 
 

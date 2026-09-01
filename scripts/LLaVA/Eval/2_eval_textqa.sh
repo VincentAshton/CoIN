@@ -17,7 +17,7 @@ else
     MODELPATH=$2
 fi
 
-RESULT_DIR="./results/CoIN/LLaVA/TextVQA"
+RESULT_DIR="${RESULT_DIR:-./results/CoIN/LLaVA/TextVQA}"
 
 for IDX in $(seq 0 $((CHUNKS-1))); do
     CUDA_VISIBLE_DEVICES=${GPULIST[$IDX]} python -m ETrain.Eval.LLaVA.CoIN.model_text_vqa \
@@ -49,7 +49,9 @@ python -m ETrain.Eval.LLaVA.CoIN.eval_textvqa \
     --result-file $output_file \
     --output-dir $RESULT_DIR/$STAGE \
 
-python -m ETrain.Eval.LLaVA.CoIN.create_prompt \
+if ! python -m ETrain.Eval.LLaVA.CoIN.create_prompt \
     --rule ./ETrain/Eval/LLaVA/CoIN/rule.json \
     --questions ./playground/Instructions_Original/TextVQA/val.json \
-    --results $output_file \
+    --results $output_file; then
+    echo "[eval] create_prompt 失败（仅 Reasoning Capability 评估需要，可跳过），继续"
+fi

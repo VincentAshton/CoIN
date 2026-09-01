@@ -98,6 +98,19 @@ To evaluate the general knowldege, you could add the result path to `scripts/Eva
 2. - [] Evaluating on different size of MLLM; We are conducting experiments with larger model, 13b llava.
 3. - [] Evaluating on full finetune.
 
+## Replay 实验（本 fork 新增）
+
+本 fork 在 CoIN 基准上复现 TRACE 式 Replay 实验：顺序微调每个任务后，对前序任务数据按比例抽样回放训练。
+详见 `scripts/CoIN_Replay/`、`RUNBOOK.md`、`HANDOFF.md`、`EXPERIMENT_LOG.md`。
+
+```bash
+# 单比例（4 任务，Truth Alignment，MAA/BWT）
+bash scripts/CoIN_Replay/run_replay_exp.sh 0.1
+bash scripts/CoIN_Replay/run_replay_exp.sh 0.01
+# 顺序扫多个比例
+bash scripts/CoIN_Replay/run_sweep.sh 0.1 0.01
+```
+
 ## Citation
 ```
 @misc{chen2024coin,

@@ -1,41 +1,16 @@
-# Python
-__pycache__
+# 数据 / 模型 / 结果不入库（与 TRACE 仓库同款规矩；都需在云端/本地单独准备）
+/checkpoints/
+/cl_dataset/
+/playground/
+/results/
+
+# 运行时产物
+__pycache__/
 *.pyc
-*.egg-info
-dist
+*.pyo
+*.egg-info/
+.venv/
 
-# Log
+# 日志与临时文件
 *.log
-*.log.*
-
-# Data
-!**/alpaca-data-conversation.json
-
-# Editor
-.idea
-*.swp
-.vscode
-.github
-.devcontainer
-
-# Other
 .DS_Store
-wandb
-output
-images_to_show
-playground
-FigurePlot
-
-results/*
-checkpoints
-cl_dataset
-ckpts*
-
-.ipynb_checkpoints
-*.ipynb
-
-# DevContainer
-!.devcontainer/*
-
-# Demo
-serve_images/

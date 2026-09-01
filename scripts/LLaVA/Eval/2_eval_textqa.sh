@@ -1,57 +1,81 @@
 #!/bin/bash
-
+# TextVQA 评估（Truth Alignment）。本 fork 改动同 1_eval_sqa.sh：PID 收集 / 去 create_prompt / dry-run。
 gpu_list="${CUDA_VISIBLE_DEVICES:-0}"
 IFS=',' read -ra GPULIST <<< "$gpu_list"
-
 CHUNKS=${#GPULIST[@]}
-
 if [ ! -n "$1" ] ;then
     STAGE='Finetune'
 else
     STAGE=$1
 fi
-
 if [ ! -n "$2" ] ;then
     MODELPATH='./checkpoints/Instruction/Only_Pretrain_1.5/TextVQA/llava-1.5-7b-lora'
 else
     MODELPATH=$2
 fi
-
 RESULT_DIR="${RESULT_DIR:-./results/CoIN/LLaVA/TextVQA}"
+QF="${QUESTION_FILE:-./playground/Instructions_Original/TextVQA/val.json}"
+STAGE_DIR="$RESULT_DIR/$STAGE"
 
+if [ "${EVAL_DRY_RUN:-0}" = "1" ]; then
+    python3 - "$STAGE_DIR" "$QF" "$CHUNKS" <<'PYEOF'
+import json, os, sys
+stage, qf, chunks = sys.argv[1], sys.argv[2], int(sys.argv[3])
+os.makedirs(stage, exist_ok=True)
+qs = json.load(open(qf))
+if os.environ.get("EVAL_FAULT_INJECT") == "1":
+    with open(os.path.join(stage, f"{chunks}_0.jsonl"), "w") as f:
+        for q in qs[: max(1, len(qs) // 2)]:
+            f.write(json.dumps({"question_id": q["question_id"], "text": "dummy"}) + "\n")
+    print("[dry-run] 注入故障: chunk 未完成即退出", flush=True)
+    sys.exit(1)
+with open(os.path.join(stage, f"{chunks}_0.jsonl"), "w") as f:
+    for q in qs:
+        f.write(json.dumps({"question_id": q["question_id"], "text": "dummy"}) + "\n")
+merged = []
+for idx in range(chunks):
+    fn = os.path.join(stage, f"{chunks}_{idx}.jsonl")
+    if not os.path.isfile(fn):
+        print(f"[dry-run] 缺 chunk {fn}", flush=True)
+        sys.exit(1)
+    merged.extend(open(fn, encoding="utf-8").read().splitlines())
+with open(os.path.join(stage, "merge.jsonl"), "w", encoding="utf-8") as f:
+    f.write("\n".join(merged) + "\n")
+with open(os.path.join(stage, "Result.text"), "w", encoding="utf-8") as f:
+    f.write(f"Samples: {len(qs)}\nAccuracy: 42.00%\n")
+print(f"[dry-run] TextVQA OK -> {stage}")
+PYEOF
+    exit $?
+fi
+
+mkdir -p "$STAGE_DIR"
+pids=()
 for IDX in $(seq 0 $((CHUNKS-1))); do
     CUDA_VISIBLE_DEVICES=${GPULIST[$IDX]} python -m ETrain.Eval.LLaVA.CoIN.model_text_vqa \
-        --model-path $MODELPATH \
+        --model-path "$MODELPATH" \
         --model-base ./checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5 \
-        --question-file ./playground/Instructions_Original/TextVQA/val.json \
+        --question-file "$QF" \
         --image-folder ./cl_dataset \
-        --answers-file $RESULT_DIR/$STAGE/${CHUNKS}_${IDX}.jsonl \
-        --num-chunks $CHUNKS \
-        --chunk-idx $IDX \
+        --answers-file "$STAGE_DIR/${CHUNKS}_${IDX}.jsonl" \
+        --num-chunks "$CHUNKS" \
+        --chunk-idx "$IDX" \
         --temperature 0 \
         --conv-mode vicuna_v1 &
+    pids+=($!)
+done
+for p in "${pids[@]}"; do
+    wait "$p" || { echo "[eval] chunk 进程失败 (pid=$p)"; exit 1; }
 done
 
-wait
-
-output_file=$RESULT_DIR/$STAGE/merge.jsonl
-
-# Clear out the output file if it exists.
-> "$output_file"
-
-# Loop through the indices and concatenate each file.
+output_file="$STAGE_DIR/merge.jsonl"
+: > "$output_file"
 for IDX in $(seq 0 $((CHUNKS-1))); do
-    cat $RESULT_DIR/$STAGE/${CHUNKS}_${IDX}.jsonl >> "$output_file"
+    chunk_file="$STAGE_DIR/${CHUNKS}_${IDX}.jsonl"
+    [ -f "$chunk_file" ] || { echo "[eval] 缺 chunk 文件 $chunk_file"; exit 1; }
+    cat "$chunk_file" >> "$output_file"
 done
 
 python -m ETrain.Eval.LLaVA.CoIN.eval_textvqa \
     --annotation-file ./cl_dataset/TextVQA/TextVQA_0.5.1_val.json \
-    --result-file $output_file \
-    --output-dir $RESULT_DIR/$STAGE \
-
-if ! python -m ETrain.Eval.LLaVA.CoIN.create_prompt \
-    --rule ./ETrain/Eval/LLaVA/CoIN/rule.json \
-    --questions ./playground/Instructions_Original/TextVQA/val.json \
-    --results $output_file; then
-    echo "[eval] create_prompt 失败（仅 Reasoning Capability 评估需要，可跳过），继续"
-fi
+    --result-file "$output_file" \
+    --output-dir "$STAGE_DIR" || exit 1

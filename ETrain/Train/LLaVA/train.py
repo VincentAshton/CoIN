@@ -114,6 +114,16 @@ def train():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     training_args._frozen = False
     local_rank = training_args.local_rank
+    # 本 fork 加固（工单 3）：seed / 学习率配置真实性日志
+    rank0_print(f"[train] seed={training_args.seed} data_seed={getattr(training_args, 'data_seed', None)}")
+    rank0_print(f"[train] lr={training_args.learning_rate} mm_projector_lr={training_args.mm_projector_lr} "
+                f"lr_scheduler_type={training_args.lr_scheduler_type} "
+                f"warmup_ratio={training_args.warmup_ratio} "
+                f"batch={training_args.per_device_train_batch_size} "
+                f"accum={training_args.gradient_accumulation_steps} "
+                f"epochs={training_args.num_train_epochs}")
+    rank0_print(f"[train] lora_enable={training_args.lora_enable} lora_r={training_args.lora_r} "
+                f"lora_alpha={training_args.lora_alpha} expert_num={model_args.expert_num}")
     compute_dtype = (torch.float16 if training_args.fp16 else (torch.bfloat16 if training_args.bf16 else torch.float32))
     
     bnb_model_from_pretrained_args = {}
@@ -164,6 +174,9 @@ def train():
                     tokenizer=tokenizer,
                     args=training_args,
                     **data_module)
+    # 本 fork 加固（工单 3）：逐 step LR 日志
+    from ETrain.Train.LLaVA.llava_trainer import LrLogCallback
+    trainer.add_callback(LrLogCallback())
     # if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
     #     trainer.train(resume_from_checkpoint=True)
     # else:
@@ -191,6 +204,7 @@ def train():
                         **data_module)
         
     trainer.train()
+    trainer.log_optimizer_scheduler("after-train")
 
     trainer.save_state()
 

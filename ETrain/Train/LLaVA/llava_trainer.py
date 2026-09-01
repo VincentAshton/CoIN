@@ -76,8 +76,7 @@ from transformers.trainer_callback import (
     ProgressCallback,
     TrainerCallback,
     TrainerControl,
-    TrainerState,
-)
+    TrainerState,)
 from transformers.trainer_pt_utils import (
     DistributedTensorGatherer,
     IterableDatasetShard,
@@ -288,6 +287,21 @@ def load_model_from_previous_task(model, model_args):
             
     filename = os.path.join(previous_task_model_path, WEIGHTS_NAME)
     adapters_weights = torch.load(filename, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    # 本 fork 加固（工单 4）：加载前 key 完整性校验——missing/unexpected 一律失败
+    def _norm(k):
+        return k[6:] if k.startswith("base_model.") else k
+    expected = {_norm(k) for k in adapters_weights.keys()}
+    actual = {_norm(n) for n, _ in model.named_parameters()
+              if (".lora_A." in n or ".lora_B." in n) and ".default." in n}
+    missing = sorted(expected - actual)
+    unexpected = sorted(actual - expected)
+    if missing or unexpected:
+        raise RuntimeError(
+            "previous_task LoRA 权重与模型 key 不匹配——禁止继续训练。\n"
+            f"  missing({len(missing)}): {missing[:10]}\n"
+            f"  unexpected({len(unexpected)}): {unexpected[:10]}")
+    print(f"[load_previous_task] LoRA keys 校验通过: {len(expected)} 个权重，"
+          f"missing=0 unexpected=0")
     load_result = set_peft_model_state_dict(model, adapters_weights, adapter_name="default")
     print('Model is loaded...')
 
@@ -326,6 +340,17 @@ class LengthGroupedSampler(Sampler):
         return iter(indices)
 
 
+class LrLogCallback(TrainerCallback):
+    """工单 3：逐 step 打印真实 LR（来自 trainer 日志，deepspeed 场景同样生效）。"""
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        print("[callback] 训练开始")
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if logs and "learning_rate" in logs:
+            print(f"[callback] step {state.global_step} lr={float(logs['learning_rate']):.3e}")
+
+
 class LLaVATrainer(Trainer):
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
@@ -360,21 +385,65 @@ class LLaVATrainer(Trainer):
         if self.optimizer is None:
             decay_parameters = get_parameter_names(opt_model, ALL_LAYERNORM_LAYERS)
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
-            
+
+            # 本 fork 加固（工单 3）：mm_projector 参数独立分组，使用 mm_projector_lr。
+            # 上游此方法只建 decay/no_decay 两组，--mm_projector_lr 被静默忽略。
+            mm_lr = getattr(self.args, "mm_projector_lr", None)
+
+            def _is_mm_projector(name):
+                return "mm_projector" in name
+
+            base_decay, base_nodecay, mm_params = [], [], []
+            for n, p in opt_model.named_parameters():
+                if not p.requires_grad:
+                    continue
+                if mm_lr is not None and _is_mm_projector(n):
+                    mm_params.append((n, p))
+                elif n in decay_parameters:
+                    base_decay.append((n, p))
+                else:
+                    base_nodecay.append((n, p))
+
+            # 完整性断言：设置了 mm_projector_lr 就必须有 mm_projector 参数；总参数非空
+            if mm_lr is not None and len(mm_params) == 0:
+                raise ValueError(
+                    "mm_projector_lr 已设置但未找到任何含 'mm_projector' 的可训练参数——"
+                    "参数分组完整性断言失败，禁止继续训练")
+            if len(base_decay) + len(base_nodecay) == 0:
+                raise ValueError("无可训练参数（decay/no_decay 均为空）——参数分组完整性断言失败")
+
             optimizer_grouped_parameters = [
                 {
-                    "params": [
-                        p for n, p in opt_model.named_parameters() if (n in decay_parameters and p.requires_grad)
-                    ],
+                    "params": [p for _, p in base_decay],
                     "weight_decay": self.args.weight_decay,
+                    "lr": self.args.learning_rate,
                 },
                 {
-                    "params": [
-                        p for n, p in opt_model.named_parameters() if (n not in decay_parameters and p.requires_grad)
-                    ],
+                    "params": [p for _, p in base_nodecay],
                     "weight_decay": 0.0,
+                    "lr": self.args.learning_rate,
                 },
             ]
+            group_names = ["decay", "no_decay"]
+            if mm_lr is not None:
+                optimizer_grouped_parameters.append(
+                    {
+                        "params": [p for _, p in mm_params],
+                        "weight_decay": self.args.weight_decay,
+                        "lr": mm_lr,
+                    })
+                group_names.append("mm_projector")
+
+            # 分组明细打印（工单 3）：每组 LR、参数数量、代表参数名
+            print("==== optimizer 参数分组明细 ====")
+            for gi, g in enumerate(optimizer_grouped_parameters):
+                n_params = sum(p.numel() for p in g["params"])
+                names = {"decay": base_decay, "no_decay": base_nodecay,
+                         "mm_projector": mm_params}[group_names[gi]]
+                print(f"  group[{gi}] name={group_names[gi]} lr={g['lr']} "
+                      f"weight_decay={g['weight_decay']} tensors={len(g['params'])} params={n_params}")
+                print(f"    repr names: {[n for n, _ in names[:3]]}")
+            print("==============================")
 
             optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args)
 
@@ -401,6 +470,22 @@ class LLaVATrainer(Trainer):
                     logger.info(f"skipped: {skipped/2**20}M params")
 
         return self.optimizer
+
+    def log_optimizer_scheduler(self, tag=""):
+        """打印真实 optimizer / scheduler 状态（工单 3）。"""
+        print(f"==== optimizer/scheduler 实况 [{tag}] ====")
+        if self.optimizer is not None:
+            print(f"  optimizer_class={type(self.optimizer).__module__}.{type(self.optimizer).__name__}")
+            for gi, g in enumerate(self.optimizer.param_groups):
+                print(f"  group[{gi}] lr={g.get('lr')} weight_decay={g.get('weight_decay')} "
+                      f"tensors={len(g.get('params', []))}")
+        else:
+            print("  optimizer=None")
+        if self.lr_scheduler is not None:
+            print(f"  scheduler_class={type(self.lr_scheduler).__module__}.{type(self.lr_scheduler).__name__}")
+        else:
+            print("  scheduler=None")
+        print("======================================")
 
     def _save_checkpoint(self, model, trial, metrics=None):
         if getattr(self.args, 'tune_mm_mlp_adapter', False):

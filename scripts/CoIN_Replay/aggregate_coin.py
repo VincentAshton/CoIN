@@ -87,8 +87,22 @@ def main():
     maa = sum(sum(A[j - 1][:j]) / j for j in range(1, T + 1)) / T
     bwt = sum(A[T - 1][i] - A[i][i] for i in range(T)) / T
 
+    # ratio 优先取 run_manifest.json 的配置（工单 6：manifest 是显式配置的唯一权威）
+    ratio = None
+    man_path = args.results_dir / "run_manifest.json"
+    if man_path.is_file():
+        try:
+            ratio = json.loads(man_path.read_text(encoding="utf-8"))["config"]["ratio"]
+        except Exception:
+            ratio = None
+    if ratio is None:
+        try:
+            ratio = float(os.path.basename(str(args.results_dir)).split("_")[-1])
+        except Exception:
+            raise ValueError(
+                f"无法从 {args.results_dir} 确定 ratio：run_manifest.json 缺失且目录名不含 ratio")
     metrics = {
-        "ratio": float(os.path.basename(str(args.results_dir)).split("_")[-1]),
+        "ratio": ratio,
         "tasks": args.tasks,
         "T": T,
         "A_matrix": A,

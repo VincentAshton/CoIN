@@ -1,0 +1,30 @@
+# CoIN+Replay 云端环境锁定（2026-09-01 加固版，未在云端实测——装完必须跑 canary B 冒烟）
+# 对应论文 2024-03 环境（A100 sm_80）；严格按此安装，勿升版本。
+# 安装顺序（conda env: coin）：
+#   conda create -n coin python=3.10 -y && conda activate coin
+#   pip install torch==2.0.1 torchvision==0.15.2 --index-url https://download.pytorch.org/whl/cu118
+#   cd <repo> && pip install -e . --no-deps
+#   pip install -r scripts/CoIN_Replay/env/requirements_coin.txt
+#   pip install flash-attn==2.5.6 --no-build-isolation   # 编译失败预案：降级 eager（LLaVA 支持）
+# 注：requirements.txt 中 git+ssh 私有依赖行已注释（ETrain 已 vendored）。
+
+torch==2.0.1
+torchvision==0.15.2
+transformers==4.32.0
+deepspeed==0.14.0
+peft==0.4.0
+accelerate==0.21.0
+bitsandbytes==0.41.0
+sentencepiece==0.1.99
+tokenizers==0.13.3
+safetensors==0.4.2
+numpy==1.26.4
+pillow==10.3.0
+opencv-python==4.9.0.80
+einops==0.6.1
+timm==0.6.13
+tqdm==4.66.2
+shortuuid
+requests==2.31.0
+scikit-learn==1.2.2
+packaging==24.0

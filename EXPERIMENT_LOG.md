@@ -141,3 +141,40 @@
 | `.gitignore` | 新增：checkpoints/cl_dataset/playground/results 不入库 |
 | `RUNBOOK.md` / `HANDOFF.md` / 本文件 | 文档三件套 |
 
+## 3. 工程加固（2026-09-01 第二轮，工单 1-9，未 push）
+
+### 3.1 修改文件清单（相对 855bfb2）
+
+| 文件 | 改动 |
+|---|---|
+| `scripts/CoIN_Replay/coin_lib.py` | 新增核心库：train_plan（分辨率报告）、ckpt_validate（文件+参数 hash+finite）、verify_predictions（数量/唯一/集合/顺序）、artifact_check、manifest 写/恢复校验（config hash）、validate_round、round_manifest（原子写） |
+| `scripts/CoIN_Replay/build_replay_data.py` | floor(N*ratio) 前缀（N*ratio<1→k=0，全 0→退出）；无图样本允许（ScienceQA）；conversations 合法性；有图时校验存在/非空/PIL；sidecar manifest（源 SHA256/N/k/选中 ID/索引/输出 SHA256）；--nested-with 断言 0.01⊆0.10 |
+| `scripts/CoIN_Replay/preflight_data.py` | 新增：四任务 train/test/val + 评估辅助文件（pid_splits/problems/TextVQA_0.5.1_val/testdev_balanced_questions）、图片存在/大小/PIL/越界/大小写、布局首段匹配、SHA256 报告（缓存复用） |
+| `scripts/CoIN_Replay/run_replay_exp.sh` | 目录契约统一；checkpoint 链 task/replay 分离（round<j>_{task,replay}_llava_lora，下一轮只加载 replay）；manifest 显式配置 export + 恢复 config hash 校验（先于 .complete 短路）；每轮 round_manifest + validate_round；评估临时目录+原子 rename；QUESTION_FILE 传递；--seed/--data_seed；ENFORCE_MIN_STEPS 门禁；DRY_RUN 模式；TASKS_JSON 可配；preflight 集成 |
+| `scripts/CoIN_Replay/aggregate_coin.py` | ratio 优先读 run_manifest.json（目录名解析为兜底） |
+| `scripts/LLaVA/Eval/{1,2,3,4}_eval_*.sh` | chunk PID 逐个收集（任一失败整次失败）；去 create_prompt；EVAL_DRY_RUN/EVAL_FAULT_INJECT；QUESTION_FILE 环境覆盖；dry-run merge 只收 chunk 文件 |
+| `ETrain/Train/LLaVA/llava_trainer.py` | create_optimizer 增加 mm_projector 独立分组（lr=mm_projector_lr）+ 完整性断言 + 分组明细打印；log_optimizer_scheduler；load_model_from_previous_task LoRA key 完整性检查（missing/unexpected 即失败）；LrLogCallback 逐 step LR |
+| `ETrain/Train/LLaVA/train.py` | seed/data_seed/lr/lora 配置真实性日志；LrLogCallback 注册；训练后 optimizer/scheduler 实况 |
+| `scripts/zero3_offload.json` | **移除 optimizer+scheduler 段**（上游会让 DeepSpeed 用单组 AdamW + WarmupLR，顶掉冻结配置的 mm_projector_lr 与 cosine） |
+| `scripts/LLaVA/Train/{3,4,5,8}_*.sh`、`Train_MOE/{2,6,7}_*.sh`、`Qwen/Eval/3_eval_ImageNet.sh` | 解决上游 0.4_MOE 分支残留的 8 处 merge conflict（保留 HEAD 侧规范路径）——原文件无法通过 bash -n |
+| `scripts/CoIN_Replay/tests/` | 新增 5 个测试模块共 46 个用例 |
+| `scripts/CoIN_Replay/run_tests.sh` | 门禁 A：bash -n + py_compile + unittest + ds 配置无 scheduler 检查 |
+| `scripts/CoIN_Replay/canary.sh` | 门禁 B-E（云端 4×A100）：GPU 冒烟 / 迷你 round1→round2 / 真实 chunk kill / 完整 ScienceQA round1 + probe |
+| `scripts/CoIN_Replay/smoke/` | smoke_gpu.py（NCCL+flash-attn）、smoke_ds.py（deepspeed 最小任务）、probe_logits.py（加载一致性）、build_canary_data.py |
+| `scripts/CoIN_Replay/env/requirements_coin.txt` | 云端依赖锁定（未实测） |
+
+### 3.2 冻结配置层面的修复（不是改超参，是让冻结配置真实生效）
+
+| 发现 | 上游实际行为 | 修复后 |
+|---|---|---|
+| mm_projector_lr 静默失效 | create_optimizer 只建 decay/no_decay 两组 | mm_projector 独立分组 lr=2e-5，无参数即报错 |
+| cosine 被替换 | zero3_offload.json 带 WarmupLR scheduler + AdamW optimizer 段 | 移除两段，trainer 的 cosine + 分组优化器生效 |
+| seed 未显式 | 未传 --seed/--data_seed | 显式 1234/1234 并日志确认 |
+
+### 3.3 测试与验证状态（2026-09-01 本地）
+
+- ✅ 门禁 A：bash -n 全部脚本、py_compile、46/46 单测（build_replay 12 / coin_lib 16 / eval 契约 3 / preflight 8 / orchestrator dry-run 4 + 其他）、zero3_offload 无 scheduler 检查 —— 全过
+- ✅ 端到端 DRY_RUN：2 任务全链路（manifest/两轮训练假 ckpt/replay 构建/评估契约/聚合/.complete/恢复跳过/配置不一致拒绝/故障注入无 .complete）
+- ⏸ 门禁 B-E（canary）：**阻塞——云端 4×A100 实例未租用**（ebcloud 32433 连接拒绝）；canary.sh 已就绪，租卡后 `bash scripts/CoIN_Replay/canary.sh` 一键执行
+
+

@@ -42,13 +42,8 @@ for IDX in $(seq 0 $((CHUNKS-1))); do
     cat $RESULT_DIR//$STAGE/${CHUNKS}_${IDX}.jsonl >> "$output_file"
 done
 
-<<<<<<< HEAD
 python -m ETrain.Eval.LLaVA.CoIN.eval_ImagetNet \
     --test-file ./playground/Instructions_Original/ImageNet/test.json \
-=======
-python -m ETrain.Eval.Qwen.eval_ImagetNet \
-    --test-file ./playground/Instructions_slim/ImageNet/test.json \
->>>>>>> aa77c0569e0888415820a676fd218fa14b7d8142
     --result-file $output_file \
     --output-dir $RESULT_DIR/$STAGE \
 

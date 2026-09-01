@@ -101,10 +101,12 @@
 ### 2.3 Replay 机制（本 fork 新增，scripts/CoIN_Replay/）
 
 - 每轮 j：① 顺序微调任务 j（LoRA r=192/alpha=256，1 epoch，续接上一轮 checkpoint）
-  ② 若 j≥2：前 j-1 任务各按 ratio 抽样（默认 random+seed=1234；可 --mode prefix 切 TRACE 前缀式）
-  合并为 replay 数据集，replay 训练 1 epoch（同 LR 2e-4，checkpoint 写回本轮目录）
-  ③ 评估任务 1..j（温度 0）→ 每序列共 10 次评估
-- 与 TRACE 的差异：TRACE 用前缀抽样 + 完整 LIMA；CoIN 无 LIMA，默认随机抽样（可切换）
+  ② 若 j≥2：前 j-1 任务各取数据前缀的 ratio 子集（**与 TRACE 一致：prefix 抽样**，
+  不重新随机抽样；seed 仅用于记录）合并为 replay 数据集，replay 训练 1 epoch（同 LR 2e-4，
+  checkpoint 写回本轮目录）③ 评估任务 1..j（温度 0）→ 每序列共 10 次评估
+- 与 TRACE 的差异：TRACE 的 replay 数据 = 历史任务 ratio 子集 + **完整 LIMA**；
+  CoIN 无 LIMA 类额外记忆语料，replay 数据 = 前序任务 ratio 子集（其余规则一致）
+- 备选：`SAMPLE_MODE=random` 可切随机抽样（统计上更均匀，但口径与 TRACE 不同，需说明）
 
 ### 2.4 冻结配置（4×A100 80G）
 
@@ -116,7 +118,7 @@
 | LoRA | r=192, alpha=256 | 论文 vanilla LoRA 配置 |
 | lr / mm_projector_lr | 2e-4 / 2e-5 | cosine |
 | 每任务 epoch | 1；replay 1 | |
-| seed / 抽样 | 1234 / random | |
+| seed / 抽样 | 1234 / prefix（TRACE 一致） | |
 | precision | bf16 + tf32 + grad ckpt | 与论文脚本一致 |
 | deepspeed | zero3_offload.json | 稳妥；冒烟后可选 zero3.json 提速 |
 

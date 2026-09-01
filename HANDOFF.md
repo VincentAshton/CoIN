@@ -12,7 +12,7 @@
 
 ## 2. 实验设计
 
-- **方法**：顺序微调（LoRA r=192/alpha=256）+ 每轮后 replay 1 epoch（前序任务按 ratio 抽样）
+- **方法**：顺序微调（LoRA r=192/alpha=256）+ 每轮后 replay 1 epoch（前序任务按 ratio 取数据前缀）
 - **模型**：LLaVA-1.5-7B（vicuna-7b-v1.5 + CLIP ViT-L/14-336 + LLaVA-1.5 projector）
 - **任务**：前 4 任务（论文随机序开头 4 个）；每序列评估 1+2+3+4=10 次
 - **比例**：0.10（基线）、0.01 —— 共 2 组
@@ -20,7 +20,10 @@
   - `MAA = (1/T)·Σ_j (1/j)·Σ_{i≤j} A_{j,i}`（全程平均精度）
   - `BWT = (1/T)·Σ_i (A_{T,i} − A_{i,i})`（负值=遗忘）
 - **基线策略**：以自己环境跑的 ratio=0.10 为基线（TRACE option B），绝不回退论文绝对值
-- **抽样**：默认 random + seed 1234（与 TRACE 前缀式不同，统计更稳；`SAMPLE_MODE=prefix` 可切换）
+- **抽样**：默认 prefix + seed 1234（与 TRACE 完全一致：取前序任务数据前缀，不重新随机抽样）；
+  `SAMPLE_MODE=random` 为备选（统计更均匀但口径与 TRACE 不同）
+- **Replay 训练**：1 epoch，同任务 LR 2e-4（与 TRACE 的 replay 规则一致；
+  差异：CoIN 无 LIMA 类额外语料，replay 数据仅含前序任务子集）
 
 ### 2.1 冻结配置（不可随意改，改了必须重跑两组）
 
@@ -32,7 +35,7 @@
 | LoRA | r=192, alpha=256, dropout 0.05 |
 | lr / mm_projector_lr | 2e-4 / 2e-5，cosine，warmup 0.03 |
 | 每任务 epoch / replay epoch | 1 / 1 |
-| seed / sample_mode | 1234 / random |
+| seed / sample_mode | 1234 / prefix（TRACE 一致） |
 | precision | bf16 + tf32 + gradient_checkpointing |
 | deepspeed | zero3_offload.json（冒烟后可试 zero3.json 提速） |
 | 任务顺序 | ScienceQA → TextVQA → ImageNet → GQA（固定） |

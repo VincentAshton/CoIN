@@ -24,7 +24,7 @@
 # 常用环境变量（全部有默认值）:
 #   GPUS=0,1,2,3   BATCH=14   ACCUM=16（4 卡下保持有效 batch 与论文 8卡×8 一致: 14*4*16=896）
 #   LR=2e-4  LORA_R=192  LORA_ALPHA=256  EPOCHS=1  REPLAY_EPOCHS=1
-#   SEED=1234  SAMPLE_MODE=random   DS_CONFIG=scripts/zero3_offload.json
+# SEED=1234  SAMPLE_MODE=prefix（与 TRACE 一致：取前序任务数据前缀）
 # ============================================================================
 set -euo pipefail
 
@@ -61,7 +61,7 @@ ACCUM="${ACCUM:-16}"
 EPOCHS="${EPOCHS:-1}"
 REPLAY_EPOCHS="${REPLAY_EPOCHS:-1}"
 SEED="${SEED:-1234}"
-SAMPLE_MODE="${SAMPLE_MODE:-random}"
+SAMPLE_MODE="${SAMPLE_MODE:-prefix}"
 PROMPT_VERSION="${PROMPT_VERSION:-v1}"
 CONV_MODE="${CONV_MODE:-vicuna_v1}"
 MODEL_MAX_LENGTH="${MODEL_MAX_LENGTH:-2048}"

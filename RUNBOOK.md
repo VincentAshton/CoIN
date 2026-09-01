@@ -101,8 +101,8 @@ cat results/CoIN_Replay/ratio_0.01/coin_metrics.json
 
 1. **不要动论文评估口径**：四个任务的 question-file/评估器原样使用（ScienceQA=test.json、
    TextVQA=val.json + TextVQA_0.5.1_val.json、ImageNet=test.json、GQA=test.json + testdev_balanced）。
-2. **Replay 数据默认 random+seed=1234**（与 TRACE 的前缀抽样不同，统计上更稳）；
-   如要复刻 TRACE 口径：`SAMPLE_MODE=prefix`。
+2. **Replay 数据默认 prefix（与 TRACE 一致）**：取前序任务 train.json 的前 ratio 子集，
+   不重新随机抽样；如要随机抽样：`SAMPLE_MODE=random`（口径与 TRACE 不同，需在汇报中说明）。
 3. **有效 batch 一致性**：4 卡必须 ACCUM=16（14×4×16=896 = 论文 8 卡×8×14）。
    改 GPU 数/超参 = 重跑两个比例。
 4. **eval 脚本里 create_prompt 已容错**（只影响 Reasoning Capability，不影响 Truth Alignment）。

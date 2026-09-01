@@ -72,7 +72,8 @@
 - [x] 2026-08-31 立项侦察：论文全文 + 仓库代码/脚本/依赖已通读，本文档建立
 - [x] 2026-09-01 实验设计确认（用户）：CoIN 基础上加 TRACE 式 Replay，验证回放比例下降阈值
 - [x] 2026-09-01 本地改造：Replay 编排/聚合脚本 + 官方脚本 bug 修复 + 文档三件套（见第 2 节）
-- [ ] 推送本地改动到 GitHub fork（VincentAshton/CoIN）
+- [x] 2026-09-01 功能测试：build_replay_data（抽样数量/seed 可复现/round1 拒绝）+ aggregate_coin（MAA/BWT 与手算一致/严格模式）12/12 通过
+- [x] 2026-09-01 推送 GitHub fork：commit `3fbedc9` → VincentAshton/CoIN（CoIN 分支，ls-remote 已验证）
 - [ ] 租卡（4×A100 80G，数据盘 ≥500G）
 - [ ] 云端环境 + 数据 + 模型下载
 - [ ] 冒烟 → canary → 正式组（ratio 0.1 / 0.01）

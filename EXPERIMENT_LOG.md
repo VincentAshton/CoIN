@@ -323,4 +323,22 @@ canary B–E 云端首跑暴露 3 个问题（本地零 GPU 无法覆盖），�
     （rm -rf ckpt/res_c/replay/data），旧完成标志不得跳过新断言；
   - C-7 canary 重跑 A–E，E 按 .complete 断点复用，C 从头真实训练。
 
+### 4.12 canary C 重审整改落地记录（2026-09-02）
+
+- 代码 commit：`89067ea`（coin_lib/canary.sh/verify_round3_load/test_ckpt_tensor_diff）
+- 文档 commit：`4e56e4c`；部署锁定 HEAD 更新
+- 预验证（真实 bf16 文件）：adapter dtype=torch.bfloat16（numpy() TypeError 根因确认）；
+  新 hash param_hash=77f2a44c… 恢复可用；旧同 tensor task/replay 被 ckpt-tensor-diff 正确判 FAIL
+  （changed=0/l2=0/hash 同/exit 1）→ 假阳性已不可能
+- 云端 run_tests v4 全绿（exit 0，9 个新 tensor-diff 用例在 torch 环境执行）
+- canary v4：A✓ B✓；C 训练全通（round1 240 样本 30 steps loss 0.758；replay 24 条
+  plan optimizer_steps=3.0；4 rank load_previous_task missing=0；round2 完成 + .complete）
+  断言 A PASS（replay global_step>=2 + LR 记录）、断言 B PASS（tensor 级 task!=replay：
+  changed>0 + hash 不同）→ 原假阳性彻底消除
+  断言 C 首跑 FAIL：verify_round3_load 缺 train.py 第 115 行 `training_args._frozen = False`
+  → create_LLaVA_model 写 tune_mm_mlp_adapter 抛 FrozenInstanceError（模型加载本身正常 ~10s）
+  → 修复 commit `2434a8b`（镜像 train.py 解冻行）
+- D✓ E：训练复用断点跳过，probe/双评估按原流程（E 不涉及本次改动）
+- canary v5 将在 v4 结束后重跑（C 从头真实训练 + 修复后的断言 C）
+
 

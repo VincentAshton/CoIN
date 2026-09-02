@@ -177,4 +177,41 @@
 - ✅ 端到端 DRY_RUN：2 任务全链路（manifest/两轮训练假 ckpt/replay 构建/评估契约/聚合/.complete/恢复跳过/配置不一致拒绝/故障注入无 .complete）
 - ⏸ 门禁 B-E（canary）：**阻塞——云端 4×A100 实例未租用**（ebcloud 32433 连接拒绝）；canary.sh 已就绪，租卡后 `bash scripts/CoIN_Replay/canary.sh` 一键执行
 
+---
+
+## 4. 云端部署 + canary probe 修复（2026-09-02）
+
+### 4.1 云端实例与代码部署
+
+- 实例：ebcloud cs-66731-55d7d-server（ssh-cn-huabei1.ebcloud.com:30267，4×A100-80GB SXM4，NVLink P2P，~31.26 元/时；cgroup：80 CPU / 400GB 内存）
+- 代码：本地 bundle（coin-6ff09a5.bundle）→ `/root/data/coin/project`，detached HEAD=6ff09a5（2026-09-02 部署）
+- 备份：`/root/data/coin/git_backup/`（bundle + binary patch）；审计报告 `coin-deploy-audit-20260902.md`
+- 目录：`/root/data/coin/{conda_envs,conda_pkgs,hf_cache,torch_cache,datasets,models,checkpoints,predictions,logs,tmp,pip_cache,cache}` 全在 1T Lustre 持久卷；env.sh 已补缓存变量（PIP_CACHE_DIR/XDG_CACHE_HOME/TORCH_EXTENSIONS_DIR/TRITON_CACHE_DIR/CUDA_CACHE_PATH + CUDA_HOME + nvcc/conda PATH + HF_ENDPOINT=hf-mirror，因 hf.co/GDrive 从实例不可达）；diff 见 logs
+- 环境：conda env 已建（`/root/data/coin/conda_envs/coin` python=3.10）；torch 2.0.1 cu118 等按 requirements_coin.txt 安装（见 logs/environment/）
+
+### 4.2 canary E probe_logits 缺陷（评审批准修复）
+
+- **根因**：`smoke/probe_logits.py` 无条件 `q['image']`；ScienceQA test.json 含纯文本题（question_id=4 无 image 字段）→ KeyError → canary E probe 必然失败（本地 DRY_RUN 无法覆盖该路径，需真实 torch+ckpt）
+- **修复（commit `9be6312`）**：与官方 `ETrain/Eval/LLaVA/CoIN/model_vqa_science.py` 语义严格对齐——
+  - 无图题：images=None 传给模型，prompt 不含 `<image>` token（不注入空白图/伪造路径）
+  - 有图题：加载并预处理图片，prompt=`<image>\n`+text；text 统一 `replace('<image>','').strip()`
+  - image 字段声明但路径越界/缺失/空/损坏 → 立即非零退出（严格失败，不跳过）
+  - 固定 probe 集（question_id 4 无图 + 5 有图）；probe manifest 原子写：question_id/has_image/图片相对路径/prompt+input_ids+logits hash/数据文件 hash
+  - 两次加载 input_ids/logits hash 完全一致才 PASS；断言 mm_use_im_start_end=False（LLaVA-1.5）
+- **测试**：新增 `tests/test_probe_logits.py` 18 用例（本地 17 过 + 1 PIL 依赖跳过；云端环境 PIL 齐全）
+- ⚠️ 本地门禁注意：8 个既有用例（test_preflight_data ×7 + test_build_replay_data ×1）在**无 PIL 的本地机器**失败（`ModuleNotFoundError: PIL`），与本次修复无关；云端 Phase 5 以 run_tests.sh 全绿为准
+- **锁定 hash 更新**：`6ff09a5` → 部署 HEAD `9be6312`（云端 /root/data/coin/project）；文档 commit 另见 git log
+- **云端同步**：bundle `coin-probe-fix.bundle` + binary patch → git_backup；`git fetch <bundle>` + checkout `9be6312`；验证 HEAD/status/bundle verify/probe_logits.py sha256
+
+### 4.3 数据/模型准备状态（截至 2026-09-02）
+
+- 指令数据（hf-mirror 已下载，sha256 见部署记录）：ScienceQA 12726/4241、TextVQA 34602/5000、ImageNet 129833/5050、GQA 72140/12578（train/test|val）
+- 模型三件套：全部 gated:false，待下载（lmsys/vicuna-7b-v1.5、openai/clip-vit-large-patch14-336、liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5）
+- 图片：ScienceQA（GDrive 实例不可达 → 需 HF 镜像替代）、TextVQA（fbail GET 206 可下）、GQA（stanford 200 可下）、ImageNet（官方注册凭据 → **阻塞，待用户提供途径**；canary 不需要）
+- ⚠️ 正式 sweep 必须 `PREFLIGHT_ARGS='--layout-map {"ImageNet":"ImageNet_withlabel","GQA":"."}'`（json 图片路径首段分别为 ImageNet_withlabel 与 `./`）；canary（ScienceQA/TextVQA）不受影响
+
+### 4.4 部署日志
+
+- `/root/data/coin/logs/`：audit_report、environment/（pip freeze/conda list/pip check）、run_tests.log、canary.log、deployment_lock_hashes.txt
+
 

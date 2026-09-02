@@ -83,10 +83,16 @@ run_sweep.sh（顺序扫 0.1 0.01，fail-fast）
     eval chunk 吞错、checkpoint 链、manifest/恢复校验、preflight、分辨率报告（详见 EXPERIMENT_LOG 3 节）
   - 门禁 A 全绿：bash -n + py_compile + **46/46 单测**（`bash scripts/CoIN_Replay/run_tests.sh`）
   - 端到端 DRY_RUN 全链路验证通过（含故障注入）
-- ⏸ **阻塞：canary B-E 需 4×A100 云端实例**（ebcloud 32433 当前拒连，未租卡）
-  - canary.sh 已就绪：`bash scripts/CoIN_Replay/canary.sh`（A 本地可跑；B-E 云端）
-- ⏳ 待办：租卡（4×A100 80G + ≥500G 盘）→ 云端装环境（requirements_coin.txt）→ 数据/模型下载 →
-  图片完整性 preflight → canary.sh 全过 → 正式 sweep（0.1 → 0.01）
+- ✅ **云端实例已租并部署**（ebcloud 30267，cs-66731-55d7d-server）：代码经 bundle 恢复至
+  `/root/data/coin/project`，HEAD = `9be6312`（含 6ff09a5 加固 + probe 修复），
+  备份 `/root/data/coin/git_backup/`（bundle + binary patch）
+- ✅ **canary E probe_logits 缺陷已修复（commit 9be6312，评审批准）**：兼容 ScienceQA 纯文本样本，
+  与官方评估语义对齐；固定 probe 集（question_id 4 无图 + 5 有图）+ probe manifest + 18 单测
+  （详见 EXPERIMENT_LOG 4.2 节）
+- ⏳ 进行中（2026-09-02）：云端装环境（requirements_coin.txt）→ 模型三件套 + 图片下载
+  （ScienceQA GDrive 不可达需 HF 镜像替代；ImageNet 需官方注册凭据——阻塞）→
+  preflight → run_tests → canary B-E
+- ⏸ 未启动正式 run_sweep.sh（canary 完成后必须人工验收）
 
 ## 6. 已修复的问题（相对上游 41411ab）
 
@@ -114,8 +120,8 @@ run_sweep.sh（顺序扫 0.1 0.01，fail-fast）
 ## 8. 恢复实验的操作步骤（实例恢复后）
 
 ```bash
-# 1. clone / pull 仓库（GitHub 当前 855bfb2；本地加固 6ff09a5 未 push，
-#    云端用 855bfb2 起步后若需加固代码，把本地 6ff09a5 的 diff 同步过去）
+# 1. clone / pull 仓库（GitHub 当前 855bfb2；本地 HEAD 9be6312（含 6ff09a5 加固 + probe 修复）未 push，
+#    云端 /root/data/coin/project 已部署 9be6312；恢复/同步以 git_backup/coin-probe-fix.bundle 为准）
 git clone https://github.com/VincentAshton/CoIN.git && cd CoIN
 
 # 2. 环境（RUNBOOK 第 3 节 + scripts/CoIN_Replay/env/requirements_coin.txt）——老栈，装完冒烟

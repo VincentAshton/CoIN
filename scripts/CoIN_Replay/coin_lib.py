@@ -134,6 +134,45 @@ def train_plan(data_json: str, batch: int, accum: int, world: int, lr: float,
 CKPT_REQUIRED = ["adapter_config.json", "non_lora_trainables.bin", "config.json"]
 
 
+def _load_adapter_tensors(adapter_path: str):
+    """torch.load adapter 权重；仅接受全 tensor state dict（结构异常抛错，不静默降级）。"""
+    import torch
+    w = torch.load(adapter_path, map_location="cpu")
+    if not isinstance(w, dict):
+        raise ValueError(f"{adapter_path}: adapter 非 state dict（{type(w).__name__}）")
+    bad = [k for k, v in w.items() if not isinstance(v, torch.Tensor)]
+    if bad:
+        raise ValueError(f"{adapter_path}: 含非 tensor 值 {len(bad)} 个: {bad[:5]}")
+    return w
+
+
+def tensor_bytes_sha256(state: dict) -> str:
+    """规范化 tensor hash：sorted keys，key 名 + 张量原始字节。
+
+    用 uint8 视图取字节（不改值、不依赖 numpy 对 bf16 的支持——原 numpy()
+    在 bf16 上抛 TypeError，导致真实 checkpoint 的 param_hash 静默降级）。
+    """
+    import torch
+    buf = hashlib.sha256()
+    for k in sorted(state.keys()):
+        buf.update(k.encode("utf-8"))
+        t = state[k].detach().cpu().contiguous()
+        buf.update(t.view(torch.uint8).numpy().tobytes())
+    return buf.hexdigest()
+
+
+def _adapter_state_report(adapter_path: str) -> dict:
+    import torch
+    w = _load_adapter_tensors(adapter_path)
+    return {
+        "n_tensors": len(w),
+        "dtype": sorted({str(v.dtype) for v in w.values()}),
+        "finite": all(bool(torch.isfinite(v).all().item()) for v in w.values()),
+        "state": w,
+        "hash": tensor_bytes_sha256(w),
+    }
+
+
 def ckpt_validate(ckpt_dir: str, require_torch: bool = True) -> dict:
     if not os.path.isdir(ckpt_dir):
         raise FileNotFoundError(f"checkpoint 目录不存在: {ckpt_dir}")
@@ -177,27 +216,95 @@ def ckpt_validate(ckpt_dir: str, require_torch: bool = True) -> dict:
                           f"视为非真实 checkpoint（DRY_RUN 假文件/占位），仅文件级校验")
         return report
     try:
-        w = torch.load(adapter_path, map_location="cpu")
-        if isinstance(w, dict):
-            finite_ok = all(torch.isfinite(v).all().item() for v in w.values())
-            buf = hashlib.sha256()
-            for k in sorted(w.keys()):
-                buf.update(k.encode())
-                buf.update(w[k].detach().cpu().contiguous().view(-1).numpy().tobytes())
-            report["param_hash"] = buf.hexdigest()
-        else:
-            finite_ok = bool(torch.isfinite(torch.as_tensor(w)).all().item())
-            report["param_hash"] = sha256_text(repr(torch.as_tensor(w).shape))
-        report["finite"] = finite_ok
-        if not finite_ok:
+        rep = _adapter_state_report(adapter_path)
+        report["param_hash"] = rep["hash"]
+        report["finite"] = rep["finite"]
+        report["n_tensors"] = rep["n_tensors"]
+        report["dtype"] = rep["dtype"]
+        if not rep["finite"]:
             raise ValueError(f"{ckpt_dir} 的 adapter 权重含 NaN/Inf")
+    except (ValueError, FileNotFoundError):
+        raise
     except Exception as e:
-        if isinstance(e, (ValueError, FileNotFoundError)):
-            raise
         report["param_hash"] = None
         report["finite"] = None
         report["note"] = f"权重解析失败({type(e).__name__})，已降级为文件级校验"
     return report
+
+
+# ---------------------------------------------------------------------------
+# tensor 级 checkpoint 比较（canary C 评审 2026-09-02：task vs replay）
+# ---------------------------------------------------------------------------
+
+def ckpt_tensor_compare(task_dir: str, replay_dir: str) -> dict:
+    """tensor 级比较 task 与 replay adapter 权重。
+
+    pass 仅当（全部满足，禁止用 metadata/目录名/mtime/JSON 差异替代）：
+      - keys 完全一致（无 missing/unexpected）
+      - 各 key shape 一致
+      - 全部 tensor finite
+      - changed_tensor_count >= 1（至少一个 tensor 的值不同）
+      - replay 规范化 tensor hash != task 规范化 tensor hash
+    结构性问题（缺文件/非 tensor/无 torch）raise（CLI exit 2）；
+    结论性失败（tensor 相同/结构不符）返回 pass=False（CLI exit 1）。
+    """
+    try:
+        import torch
+    except ImportError:
+        raise RuntimeError("ckpt-tensor-diff 需要 torch（canary 环境已安装）")
+
+    def _adapter_file(d):
+        for name in ("adapter_model.safetensors", "adapter_model.bin"):
+            p = os.path.join(d, name)
+            if os.path.isfile(p):
+                return p
+        raise FileNotFoundError(f"{d} 缺少 adapter_model.(safetensors|bin)")
+
+    tp, rp = _adapter_file(task_dir), _adapter_file(replay_dir)
+    trep = _adapter_state_report(tp)
+    rrep = _adapter_state_report(rp)
+    tw, rw = trep.pop("state"), rrep.pop("state")
+    tkeys, rkeys = set(tw), set(rw)
+    missing = sorted(tkeys - rkeys)
+    unexpected = sorted(rkeys - tkeys)
+    shared = sorted(tkeys & rkeys)
+    shape_mismatch = [k for k in shared if tuple(tw[k].shape) != tuple(rw[k].shape)]
+    changed = []
+    l2_sq = 0.0
+    max_abs = 0.0
+    for k in shared:
+        if tuple(tw[k].shape) != tuple(rw[k].shape):
+            continue
+        if not torch.equal(tw[k], rw[k]):
+            changed.append(k)
+        d = (tw[k].float() - rw[k].float())
+        l2_sq += float(d.pow(2).sum().item())
+        m = float(d.abs().max().item())
+        if m > max_abs:
+            max_abs = m
+    keys_ok = not missing and not unexpected and not shape_mismatch
+    finite_ok = trep["finite"] and rrep["finite"]
+    hash_diff = trep["hash"] != rrep["hash"]
+    verdict_pass = bool(keys_ok and finite_ok and changed and hash_diff)
+    return {
+        "pass": verdict_pass,
+        "task_dir": task_dir,
+        "replay_dir": replay_dir,
+        "keys": {
+            "task_n": len(tkeys), "replay_n": len(rkeys),
+            "missing": missing, "unexpected": unexpected,
+            "shape_mismatch": shape_mismatch,
+        },
+        "finite": {"task": trep["finite"], "replay": rrep["finite"]},
+        "dtype": {"task": trep["dtype"], "replay": rrep["dtype"]},
+        "changed_tensor_count": len(changed),
+        "changed_tensors": changed[:20],
+        "l2_norm_diff": round(l2_sq ** 0.5, 6),
+        "max_abs_diff": round(max_abs, 6),
+        "tensor_hash": {"task": trep["hash"], "replay": rrep["hash"],
+                        "differs": hash_diff},
+    }
+
 
 
 # ---------------------------------------------------------------------------
@@ -436,6 +543,16 @@ def main():
     elif cmd == "ckpt-validate":
         rep = ckpt_validate(sys.argv[2], require_torch=not _flag(sys.argv[3:], "--no-torch"))
         print(json.dumps(rep, ensure_ascii=False))
+    elif cmd == "ckpt-tensor-diff":
+        try:
+            rep = ckpt_tensor_compare(sys.argv[2], sys.argv[3])
+        except Exception as e:
+            print(json.dumps({"pass": False, "structural_error": str(e),
+                              "task_dir": sys.argv[2], "replay_dir": sys.argv[3]},
+                             ensure_ascii=False))
+            sys.exit(2)
+        print(json.dumps(rep, ensure_ascii=False))
+        sys.exit(0 if rep["pass"] else 1)
     elif cmd == "verify-predictions":
         a = _kv(sys.argv[2:])
         rep = verify_predictions(a["--questions"], a["--predictions"],

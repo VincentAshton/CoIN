@@ -46,13 +46,28 @@ if timeout 900 torchrun --standalone --nproc_per_node="$(awk -F',' '{print NF}' 
         --master_port=29518 scripts/CoIN_Replay/smoke/smoke_ds.py \
         --ds-config "$ROOT/scripts/zero3_offload.json"; then ok "DeepSpeed 最小任务"; else bad "DeepSpeed 最小任务"; fi
 
-# ---------------- C：迷你数据 round1→round2 ----------------
+# ---------------- C：迷你数据 round1→round2（评审 2026-09-02 重审版） ----------------
 step "C: 迷你数据真实训练（round1→round2，触发 LoRA 链 + replay）"
 CD="$CANARY_ROOT/data"
+# C 必须从头真实训练：旧的 .round*_done/.complete 不得跳过新断言（评审 C-6/C-7）。
+# C 与 E 使用独立根（ckpt/ckpt_e、res_c/res_e），只清 C 自己的目录，不影响 E 断点复用。
+rm -rf "$CD" "$CANARY_ROOT/ckpt" "$CANARY_ROOT/res_c" "$CANARY_ROOT/replay" \
+       "$CANARY_ROOT/preflight_c.json"
+# 数据量公式化（评审 C-1）：replay 样本数必须 >= 2 个 optimizer step 的有效 batch。
+# replay k = floor(round1_train_N * ratio)；有效 batch = world * per_device_batch * grad_accum。
+WORLD=$(awk -F',' '{print NF}' <<< "$GPUS")
+C_BATCH=2 C_ACCUM=1 C_RATIO=0.1
+EFF=$((WORLD * C_BATCH * C_ACCUM))          # 每 optimizer step 消耗样本
+REPLAY_STEP_TARGET=3                         # 目标 ≥2，取 3 留余量（防采样/分桶边界）
+REPLAY_MIN=$((REPLAY_STEP_TARGET * EFF))     # replay 最少样本数
+TRAIN_N=$(python3 -c "import math; print(int(math.ceil($REPLAY_MIN / $C_RATIO)))")
+echo "[canary C] world=$WORLD batch=$C_BATCH accum=$C_ACCUM eff_batch=$EFF"
+echo "[canary C] replay_target=${REPLAY_STEP_TARGET} optimizer_steps -> replay_min=$REPLAY_MIN samples, ratio=$C_RATIO -> round1_train_n=$TRAIN_N"
 "$PY" scripts/CoIN_Replay/smoke/build_canary_data.py \
     --data-dir playground/Instructions_Original --out "$CD" \
-    --tasks ScienceQA TextVQA --train-n 16 --test-n 8
-if DRY_RUN=0 GPUS="$GPUS" BATCH=2 ACCUM=1 EPOCHS=1 REPLAY_EPOCHS=1 \
+    --tasks ScienceQA TextVQA --train-n "$TRAIN_N" --test-n 8
+if DRY_RUN=0 GPUS="$GPUS" BATCH=$C_BATCH ACCUM=$C_ACCUM EPOCHS=1 REPLAY_EPOCHS=1 \
+       ENFORCE_MIN_STEPS=1 \
        BASE_MODEL=checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5 \
        VISION_TOWER=checkpoints/LLaVA/clip-vit-large-patch14-336 \
        PROJECTOR=checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5-projector/mm_projector.bin \
@@ -62,15 +77,61 @@ if DRY_RUN=0 GPUS="$GPUS" BATCH=2 ACCUM=1 EPOCHS=1 REPLAY_EPOCHS=1 \
        PREFLIGHT_REPORT="$CANARY_ROOT/preflight_c.json" \
        PREFLIGHT_ARGS="--skip-pil" \
        TASKS_JSON='["ScienceQA","TextVQA"]' \
-       bash scripts/CoIN_Replay/run_replay_exp.sh 0.1 \
+       bash scripts/CoIN_Replay/run_replay_exp.sh "$C_RATIO" \
     && [ -f "$CANARY_ROOT/res_c/.complete" ]; then
-    ok "canary C 全链路（含 task!=replay hash 断言若 torch 可用）"
-    echo "  训练日志: $CANARY_ROOT/res_c/logs/"
-    # 记录 task/replay 参数 hash 供人工核对（工单 4 canary 证明点）
-    "$PY" scripts/CoIN_Replay/coin_lib.py ckpt-validate "$CANARY_ROOT/ckpt/round2_task_llava_lora" | tee "$CANARY_ROOT/task_hash.json"
-    "$PY" scripts/CoIN_Replay/coin_lib.py ckpt-validate "$CANARY_ROOT/ckpt/round2_replay_llava_lora" | tee "$CANARY_ROOT/replay_hash.json"
+    ok "canary C run_replay_exp 完成（round1→round2 + replay）"
 else
-    bad "canary C"
+    bad "canary C run_replay_exp"
+fi
+# ---- 强制断言 A（评审 C-2）：replay 训练分辨率 + optimizer steps + LR ----
+REPLAY_CKPT="$CANARY_ROOT/ckpt/round2_replay_llava_lora"
+TASK_CKPT="$CANARY_ROOT/ckpt/round2_task_llava_lora"
+REPLAY_MAN="$CANARY_ROOT/replay/round2_train.json.manifest.json"
+REPLAY_TS="$REPLAY_CKPT/trainer_state.json"
+if [ -f "$REPLAY_TS" ] && [ -f "$REPLAY_MAN" ] && [ -f "$TASK_CKPT/adapter_model.bin" ]; then
+    if python3 - "$REPLAY_TS" "$REPLAY_MAN" "$EFF" "$C_ACCUM" "$WORLD" <<'PYEOF'
+import json, sys
+ts, man, eff, accum, world = (json.load(open(sys.argv[1])),
+                              json.load(open(sys.argv[2])),
+                              int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]))
+n = man["output"]["N"]
+gs = int(ts.get("global_step", 0))
+hist = ts.get("log_history", [])
+lr_last = None
+for h in reversed(hist):
+    if "learning_rate" in h:
+        lr_last = h["learning_rate"]; break
+print(f"[canary C] replay 数据: N={n} 条（manifest），有效 batch/step={eff}")
+print(f"[canary C] replay 训练: global_step={gs} optimizer_steps={gs} "
+      f"(要求 >=2)，grad_accum={accum} world={world} per_device_batch={eff // (accum * world)}")
+print(f"[canary C] replay 末次 LR={lr_last}")
+ok = gs >= 2 and lr_last is not None
+print(f"[canary C] replay optimizer_steps>=2 断言: {'PASS' if ok else 'FAIL'}")
+sys.exit(0 if ok else 1)
+PYEOF
+    then
+        ok "C: replay optimizer_steps>=2（global_step 增加 + LR 记录）"
+    else
+        bad "C: replay optimizer_steps<2（replay 未产生有效训练步）"
+    fi
+else
+    bad "C: 缺 replay trainer_state/manifest/task adapter"
+fi
+# ---- 强制断言 B（评审 C-3）：tensor 级 task vs replay 比较（禁止 metadata 假阳性）----
+if "$PY" scripts/CoIN_Replay/coin_lib.py ckpt-tensor-diff "$TASK_CKPT" "$REPLAY_CKPT"; then
+    ok "C: task/replay tensor 级差异（changed>0 + hash 不同 + finite + keys/shapes 一致）"
+else
+    bad "C: task/replay tensor 相同或结构不符（replay 未生效）"
+fi
+# ---- 强制断言 C（评审 C-4）：Round 3 previous-task 加载（源=round2_replay）----
+if "$PY" scripts/CoIN_Replay/smoke/verify_round3_load.py \
+        --model-base checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5 \
+        --vision-tower checkpoints/LLaVA/clip-vit-large-patch14-336 \
+        --projector checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5-projector/mm_projector.bin \
+        --previous-task "$REPLAY_CKPT" --task-ckpt "$TASK_CKPT"; then
+    ok "C: round3 previous-task 加载验证（missing=0/unexpected=0 + hash==replay != task）"
+else
+    bad "C: round3 previous-task 加载验证失败"
 fi
 
 # ---------------- D：真实 eval chunk 被杀 → fail-fast ----------------

@@ -179,17 +179,22 @@ ENFORCE_MIN_STEPS=1 ALLOW_SINGLE_STEP_REPLAY=1 bash scripts/CoIN_Replay/run_swee
 
 ### 10.3 恢复/续接步骤
 ```bash
-# 代码：直接 GitHub（已同步 a29b29d）或本地/云端 git_backup bundle
-git clone https://github.com/VincentAshton/CoIN.git && cd CoIN   # HEAD=a29b29d
+# 代码：直接 GitHub（已同步 7c45394）或本地/云端 git_backup bundle
+git clone https://github.com/VincentAshton/CoIN.git && cd CoIN   # HEAD=7c45394
 
-# 云端（若实例重租）：代码 bundle 恢复 + 环境按 RUNBOOK；数据在持久卷无需重下
-# 数据准备完先跑权威 preflight（四任务，ImageNet 需
-#   --layout-map '{"ImageNet":"ImageNet_withlabel","GQA":"."}'）
+# canary 已验收通过（v5 全绿，证据在持久卷 logs/archive_final_20260902/canary_v5.log，
+# 不随实例关闭丢失）——同节点重租后【不需要】重跑 canary。
+# 仅当环境有实质变动（不同实例配置/重装依赖）才重验门禁：
+#   bash scripts/CoIN_Replay/run_tests.sh   # 期望 Ran 73 OK（零 GPU，5 分钟环境健全性快检）
+#   bash scripts/CoIN_Replay/canary.sh      # 全绿（C 自清重训/E 断点复用）——环境变动时
 
-# 门禁 + canary（C 每次自清目录从头训；E 有 .complete 可复用）
-bash scripts/CoIN_Replay/run_tests.sh            # 期望 Ran 73 OK
-bash scripts/CoIN_Replay/canary.sh               # 期望全绿
-# 正式 sweep（两组；ImageNet 就绪 + 四任务 preflight 通过后才允许）
+# 下一步正式实验的路径：ImageNet 图片（官方注册凭据，~150G）→ 四任务 preflight
+# （ImageNet 需 --layout-map '{"ImageNet":"ImageNet_withlabel","GQA":"."}'）→ sweep
+python scripts/CoIN_Replay/preflight_data.py --data-dir playground/Instructions_Original \
+    --image-dir cl_dataset --out-report results/CoIN_Replay/preflight_report.json \
+    --tasks ScienceQA TextVQA ImageNet GQA \
+    --layout-map '{"ImageNet":"ImageNet_withlabel","GQA":"."}'
+# 四任务 preflight 全 PASS 后，正式 sweep（两组）
 bash scripts/CoIN_Replay/run_sweep.sh 0.1 0.01
 ```
 - canary C 数据公式：round1_train_n = ceil(3 × world × batch × accum / ratio)（当前 = 240，

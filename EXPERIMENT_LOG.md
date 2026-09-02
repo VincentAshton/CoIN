@@ -296,4 +296,31 @@ canary B–E 云端首跑暴露 3 个问题（本地零 GPU 无法覆盖），�
   双评估比对排除 answer_id、其余字段+顺序逐题一致才算 PASS。
 - 不改变训练参数/replay ratio/正式评估口径/数据/评估脚本。
 
+### 4.11 canary C 验收重审修复（2026-09-02，评审不通过 → 7 条整改批准）
+
+- **不通过原因**：C 的 ok 仅凭 run_replay_exp .complete；mini replay（1 样本）0 个
+  optimizer step，task/replay adapter 字节相同（sha 74175800…），"task!=replay" 靠
+  ckpt-validate 文件级 hash/降级路径 + metadata 差异通过 → 测试假阳性。
+- **整改（commit 见 4.12）**：
+  - C-1 数据公式化：canary.sh C 按 world(4)×batch(2)×accum(1)=eff 8 计算，
+    replay 目标 ≥2 steps（取 3 余量）→ replay_min=24 → round1_train_n=ceil(24/0.1)=240，
+    replay=floor(240×0.1)=24 条 = 3 optimizer steps（不硬编码）；
+  - C-2 训练断言：读取 round2_replay trainer_state global_step ≥2 + 末次 LR，记录
+    N/有效 batch/grad_accum/world/optimizer steps；0 step → C FAIL；
+    run_replay_exp 加 ENFORCE_MIN_STEPS=1；
+  - C-3 tensor 级比较：coin_lib 新 `ckpt-tensor-diff`（keys/shapes 一致 + 全 finite +
+    changed_tensor_count≥1 + L2 + max_abs_diff + 规范化 tensor hash 不同，exit 0/1/2）；
+    同时修复 coin_lib 参数级 hash 的 bf16 TypeError 根因（numpy() 不支持 bf16 →
+    uint8 视图取字节），真实 checkpoint 的 param_hash 不再静默降级（run_replay_exp
+    内部的 task!=replay 参数断言恢复生效）；
+  - C-4 round3 previous-task 验证：新 smoke/verify_round3_load.py 用与正式 Round 3
+    完全相同的入口（train.py HfArgumentParser → create_LLaVA_model →
+    load_model_from_previous_task），源=round2_replay，断言 missing=0/unexpected=0、
+    加载后 float32 规范化 hash == round2_replay hash != round2_task hash；
+  - C-5 回归测试：tests/test_ckpt_tensor_diff.py 9 用例（tensor 相同+metadata 不同必须
+    FAIL、CLI exit 码 0/1/2、missing/shape/NaN/bf16 hash 稳定）；
+  - C-6 新 commit/bundle/同步/run_tests/重跑 canary；C 段每次从零清目录重训
+    （rm -rf ckpt/res_c/replay/data），旧完成标志不得跳过新断言；
+  - C-7 canary 重跑 A–E，E 按 .complete 断点复用，C 从头真实训练。
+
 

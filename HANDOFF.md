@@ -154,3 +154,46 @@ ENFORCE_MIN_STEPS=1 ALLOW_SINGLE_STEP_REPLAY=1 bash scripts/CoIN_Replay/run_swee
 - 完成判定只看 `.complete`；失败即 fail-fast，不继续烧卡
 - 不自动删 checkpoint；结果先拉回本地再清理
 - 不做 Reasoning Capability（省 vllm/Qwen1.5-32B）；如后续要做，README 的 Eval_GeneralKnowledge 流程可用
+
+## 10. 当前进度快照（2026-09-02 封存，本段取代 §8/§9 的旧状态描述）
+
+### 10.1 部署锁定状态
+- **代码 HEAD = `a29b29d`**（本段所在的最终提交；GitHub origin/CoIN 已同步至此，2026-09-02 解除"不推送"约束）
+- 云端实例 ebcloud:30267（CoIN 实例）`/root/data/coin/project` 工作树 = a29b29d、干净；
+  备份 bundle 在 `/root/data/coin/git_backup/`（6ff09a5 → coin-canaryv5.bundle 全链）
+- **canary v5 全绿**（A/B/C/D/E；C 含评审重审三重断言）；run_tests v4 = **Ran 73 tests OK**
+- 完整修复链（均评审批准）：probe_logits 9be6312 → smoke_gpu/smoke_ds 7bab671 →
+  DRY_RUN flake coin_lib bfbc1b0 → previous-task LoRA `_norm` f8ede2f → canary E 双评估 6e40594 →
+  **canary C 重审** 89067ea（coin_lib `ckpt-tensor-diff` + canary.sh C 公式化数据/三重断言 +
+  smoke/verify_round3_load.py）+ 2434a8b（_frozen 镜像）。细节：EXPERIMENT_LOG 4.6–4.13
+
+### 10.2 数据与环境（全在 /root/data 持久卷，实例重租不丢）
+- 模型：/root/data/coin/models（vicuna-7b-v1.5 13G + clip 1.6G + projector 42M）
+- 图片：/root/data/coin/datasets/cl_dataset（project/cl_dataset 符号链接指向）；
+  **preflight 权威 PASS（2026-09-02）**：SQA refs 8235 / TextVQA refs 39602（unique 25119，
+  多题共享图）/ GQA refs 84718，全部 missing=0 corrupt=0
+- 环境：/root/data/coin/conda_envs/coin（torch 2.0.1+cu118 / transformers 4.32.0 / peft 0.4.0 /
+  deepspeed 0.14.0 / flash-attn 2.5.6 / protobuf 4.25.3 / python 3.10.21）
+- 封存：/root/data/coin/logs/archive_final_20260902/（sha256_manifest_final.txt + run_tests_v4/canary_v5 日志）
+- 正式 sweep 的**唯一阻塞 = ImageNet 图片未备**（需官方注册凭据下载，~150G）
+
+### 10.3 恢复/续接步骤
+```bash
+# 代码：直接 GitHub（已同步 a29b29d）或本地/云端 git_backup bundle
+git clone https://github.com/VincentAshton/CoIN.git && cd CoIN   # HEAD=a29b29d
+
+# 云端（若实例重租）：代码 bundle 恢复 + 环境按 RUNBOOK；数据在持久卷无需重下
+# 数据准备完先跑权威 preflight（四任务，ImageNet 需
+#   --layout-map '{"ImageNet":"ImageNet_withlabel","GQA":"."}'）
+
+# 门禁 + canary（C 每次自清目录从头训；E 有 .complete 可复用）
+bash scripts/CoIN_Replay/run_tests.sh            # 期望 Ran 73 OK
+bash scripts/CoIN_Replay/canary.sh               # 期望全绿
+# 正式 sweep（两组；ImageNet 就绪 + 四任务 preflight 通过后才允许）
+bash scripts/CoIN_Replay/run_sweep.sh 0.1 0.01
+```
+- canary C 数据公式：round1_train_n = ceil(3 × world × batch × accum / ratio)（当前 = 240，
+  replay 24 条 = 3 optimizer steps）；断言含 replay global_step≥2、tensor 级 task!=replay
+  （coin_lib ckpt-tensor-diff）、round3 previous-task 加载（verify_round3_load.py）
+- 已知观察：replay 训练末步 LR=0.0 是 cosine 终点（canary 3 steps 下第 3 步为 lr 0，无碍；
+  正式 14+ steps 同标准调度）；0.01 组 replay 若 N×ratio<1 会由 build_replay_data 拒绝（空 replay 禁止）

@@ -92,6 +92,8 @@ run_sweep.sh（顺序扫 0.1 0.01，fail-fast）
 - ✅ **canary B 缺陷修复（评审二轮批准，commit 见 EXPERIMENT_LOG 4.6）**：smoke_gpu requires_grad+梯度断言；
   smoke_ds 改 torchrun --standalone 四卡分布式（ZeRO-3 bf16 实测 PASS）；requirements_coin 补
   protobuf==4.25.3 + run_tests [A5] 版本断言（详见 EXPERIMENT_LOG 4.5 节）
+- ✅ **DRY_RUN flake 修复（评审方案 A，commit 见 EXPERIMENT_LOG 4.8）**：coin_lib ckpt_validate
+  <1MB 尺寸守卫（DRY_RUN 假文件确定性降级，真实 checkpoint 校验不变）+ A5 import 写法修正
 - ⏳ 进行中（2026-09-02）：云端装环境（requirements_coin.txt）→ 模型三件套 + 图片下载
   （ScienceQA GDrive 不可达需 HF 镜像替代；ImageNet 需官方注册凭据——阻塞）→
   preflight → run_tests → canary B-E

@@ -249,4 +249,24 @@ canary B–E 云端首跑暴露 3 个问题（本地零 GPU 无法覆盖），�
     n_params=4 param_changed=True（全 rank）；全局汇总 PASS
 - requirements_coin.txt SHA256 已更新（见 deployment_lock_hashes.txt）
 
+### 4.7 DRY_RUN flake 修复（2026-09-02，评审方案 A 批准）
+
+- **根因**：run_replay_exp.sh DRY_RUN 假 checkpoint 用 64B `/dev/urandom` 生成；torch 安装后
+  ckpt_validate 走参数级校验，torch.load 随机字节约 25% 概率抛
+  `ValueError: unsupported pickle protocol`（重抛路径）→ run_tests/canary A ~25% flake
+  （实测同环境 run_tests #1 过、#2 挂，随机字节决定异常类型）。
+- **修复**：coin_lib.py ckpt_validate 在 torch.load 前加 <1MB 尺寸守卫——
+  adapter 文件 <1MB 视为非真实 checkpoint（DRY_RUN 假文件/占位），确定性降级文件级校验并标注；
+  真实 LoRA adapter（7B r=192 数百 MB、r=8 也 ≥1MB）不受影响，参数级校验严格性零损失。
+- **附带修正**：run_tests.sh [A5] 原用 `import protobuf` 判断——protobuf 4.x 无顶层模块
+  （import 必然失败），改 importlib.metadata 查版本。
+- **验证**：云端合成 64B 随机假 ckpt → ckpt-validate 确定性降级（note 标注 <1MB）exit 0；
+  本地 orchestrator/coin_lib/probe 43 用例 OK。
+- 代码 commit：见 4.8
+
+### 4.8 DRY_RUN flake 修复 commit（2026-09-02）
+
+- 代码 commit：`bfbc1b0`（coin_lib.py + run_tests.sh）
+- 文档 commit（本段）：见 git log HEAD（部署锁定 HEAD）
+
 

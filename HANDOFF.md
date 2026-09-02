@@ -89,6 +89,9 @@ run_sweep.sh（顺序扫 0.1 0.01，fail-fast）
 - ✅ **canary E probe_logits 缺陷已修复（commit 9be6312，评审批准）**：兼容 ScienceQA 纯文本样本，
   与官方评估语义对齐；固定 probe 集（question_id 4 无图 + 5 有图）+ probe manifest + 18 单测
   （详见 EXPERIMENT_LOG 4.2 节）
+- ✅ **canary B 缺陷修复（评审二轮批准，commit 见 EXPERIMENT_LOG 4.6）**：smoke_gpu requires_grad+梯度断言；
+  smoke_ds 改 torchrun --standalone 四卡分布式（ZeRO-3 bf16 实测 PASS）；requirements_coin 补
+  protobuf==4.25.3 + run_tests [A5] 版本断言（详见 EXPERIMENT_LOG 4.5 节）
 - ⏳ 进行中（2026-09-02）：云端装环境（requirements_coin.txt）→ 模型三件套 + 图片下载
   （ScienceQA GDrive 不可达需 HF 镜像替代；ImageNet 需官方注册凭据——阻塞）→
   preflight → run_tests → canary B-E

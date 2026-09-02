@@ -214,4 +214,39 @@
 
 - `/root/data/coin/logs/`：audit_report、environment/（pip freeze/conda list/pip check）、run_tests.log、canary.log、deployment_lock_hashes.txt
 
+### 4.5 canary 首跑缺陷修复（2026-09-02，评审二轮批准）
+
+canary B–E 云端首跑暴露 3 个问题（本地零 GPU 无法覆盖），评审逐项批准修复：
+
+1. **protobuf 版本缺口（环境，C 训练崩溃）**：transformers 4.32 加载 llama tokenizer 时
+   `sentencepiece_model_pb2` 导入在 protobuf 5/6 下静默失败 → UnboundLocalError。
+   requirements_coin.txt 原漏 pin；作者 requirements.txt 锁定 protobuf==4.25.3。
+   修复：requirements_coin.txt 补 `protobuf==4.25.3` + run_tests.sh 新增 [A5] 版本断言
+   （protobuf 可导入时必须 ==4.25.3，零依赖环境跳过）。
+2. **smoke_gpu.py flash-attn bwd 必失败（测试脚本）**：q/k/v 未设 requires_grad →
+   `o.sum().backward()` 无 grad_fn。修复：三个张量 requires_grad=True，backward 后严格断言
+   q/k/v grads 均存在、全部 finite、至少一个非零；若修复后仍失败视为真实环境阻塞，不削弱测试。
+3. **smoke_ds.py 单进程 MPI 探测失败（测试脚本）**：deepspeed.initialize 无分布式环境走
+   MPI（缺 mpi4py）。修复（评审方案 A）：canary.sh 改 `torchrun --standalone --nproc_per_node=4`
+   启动（与正式四卡路径一致），smoke_ds.py 分布式化：
+   - WORLD_SIZE==4 断言、LOCAL_RANK 选 GPU、每 rank 不同卡、bf16（对齐正式 bf16+tf32）
+   - 显式解析正式配置的 auto 字段（fp16 off/bf16 on、gradient_clipping=1.0、
+     zero_force_ds_cpu_optimizer=False——均与 HF trainer 在正式路径的解析一致，config 文件不改）
+   - GatheredParameters（deepspeed 公共 API）验证：loss finite + 参数 finite +
+     step 后至少一个参数非零变化；全部 rank 通过才 exit 0；finally 清理 process group
+   - canary.sh 以 timeout 900 包裹防挂死
+- 验证（云端 4×A100 实机）：smoke_gpu 4 卡 fwd/bwd/grads 全 PASS；smoke_ds 4 卡
+  loss=0.917969 finite / param_changed=True / 全局汇总 PASS
+- 代码 commit：见 4.6；不改变训练参数/replay ratio/正式评估口径/数据
+
+### 4.6 canary B 修复 commit（2026-09-02）
+
+- 代码 commit：`7bab671`（5 文件：smoke_gpu/smoke_ds/canary.sh/requirements_coin.txt/run_tests.sh）
+- 文档 commit（本段）：见 git log HEAD（部署锁定 HEAD）
+- 实机验证（修复后、同步前先行独立跑通）：
+  - smoke_gpu：4 rank NCCL sum=4 ✓；flash-attn 2.5.6 fwd OK ✓；q/k/v grads 存在+finite+非零 ✓；bwd OK ✓
+  - smoke_ds：4 rank rank/local_rank/gpu 映射正确；loss=0.917969 loss_finite ✓ params_finite ✓
+    n_params=4 param_changed=True（全 rank）；全局汇总 PASS
+- requirements_coin.txt SHA256 已更新（见 deployment_lock_hashes.txt）
+
 

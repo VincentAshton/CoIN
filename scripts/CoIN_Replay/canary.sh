@@ -132,16 +132,43 @@ if "$PY" scripts/CoIN_Replay/smoke/probe_logits.py \
 else
     bad "E: probe logits 一致性"
 fi
-# 双评估一致性（温度 0 → 两次结果必须完全一致）
+# 双评估一致性（温度 0 → 两次结果必须逐题一致）
+# 修复（评审 2026-09-02）：① 原 rm -rf "$E1" 删掉了比对参照，检查永远失败——E1 不再删，
+#    .complete 跳训导致 E1 缺失时自动重建；② merge.jsonl 含随机 answer_id（shortuuid），
+#    逐字节 diff 永远不等——比对排除 answer_id，其余字段+顺序逐题一致才算 PASS
+#    （预测确定性已由 eval3 双跑诊断证实：4241 行除 answer_id 外全部一致）
 E1="$E_RES/ScienceQA/round1"
-rm -rf "$E1" "$CANARY_ROOT/eval2"
+rm -rf "$CANARY_ROOT/eval2"
+if [ ! -f "$E1/merge.jsonl" ]; then
+    mkdir -p "$(dirname "$E1")"
+    CUDA_VISIBLE_DEVICES="$GPUS" RESULT_DIR="$(dirname "$E1")" \
+      bash scripts/LLaVA/Eval/1_eval_sqa.sh round1 "$E_CKPT" || bad "E: 第一次评估"
+fi
 CUDA_VISIBLE_DEVICES="$GPUS" RESULT_DIR="$CANARY_ROOT/eval2" \
-  bash scripts/LLaVA/Eval/1_eval_sqa.sh round1 "$E_CKPT" || bad "E: 第一次评估"
-if diff -q "$E1/merge.jsonl" "$CANARY_ROOT/eval2/round1/merge.jsonl" >/dev/null \
-   && diff -q "$E1/output_result.jsonl" "$CANARY_ROOT/eval2/round1/output_result.jsonl" >/dev/null; then
-    ok "E: 两次评估结果逐字节一致（温度 0 确定性）"
+  bash scripts/LLaVA/Eval/1_eval_sqa.sh round1 "$E_CKPT" || bad "E: 第二次评估"
+if [ -f "$E1/merge.jsonl" ] && [ -f "$CANARY_ROOT/eval2/round1/merge.jsonl" ]; then
+    if python3 - "$E1/merge.jsonl" "$CANARY_ROOT/eval2/round1/merge.jsonl" <<'PYEOF'
+import json, sys
+def load(p):
+    rows = []
+    for ln, line in enumerate(open(p, encoding="utf-8"), 1):
+        line = line.strip()
+        if line:
+            r = json.loads(line)
+            r.pop("answer_id", None)  # shortuuid 每次随机，非预测内容
+            rows.append((ln, r))
+    return rows
+a, b = load(sys.argv[1]), load(sys.argv[2])
+print(f"[E] 两次评估 {len(a)} vs {len(b)} 条（排除 answer_id）逐题一致: {a == b}")
+sys.exit(0 if a == b else 1)
+PYEOF
+    then
+        ok "E: 两次评估逐题一致（温度 0 确定性，排除随机 answer_id）"
+    else
+        bad "E: 两次评估结果不一致"
+    fi
 else
-    bad "E: 两次评估结果不一致"
+    bad "E: 缺少评估产物（E1 或 eval2）"
 fi
 
 # ---------------- 结论 ----------------

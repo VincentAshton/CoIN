@@ -283,4 +283,17 @@ canary B–E 云端首跑暴露 3 个问题（本地零 GPU 无法覆盖），�
   无 .default.）归一化后两侧完全 MATCH。
 - 不改变训练参数/replay ratio/正式评估口径/数据。
 
+### 4.10 canary E 双评估检查两缺陷修复（2026-09-02，评审批准）
+
+- canary v2 结果：A✓ B✓ C✗（4.9 已修）D✓ E（训练✓ probe✓ 双评估✗）
+- **双评估 ✗ 的两个独立缺陷（canary.sh E 段）**：
+  ① `rm -rf "$E1"` 删掉比对参照（第 137 行 diff 的对象已被第 134 行删除）→ 检查永远失败；
+  ② merge.jsonl 每行含随机 `answer_id`（model_vqa_science 的 shortuuid）→ 即使保留 E1，
+  逐字节 diff 也永远不等。
+- **确定性诊断（eval3 双跑）**：4241 行差异全部且仅差在 answer_id（diff_fields={'answer_id': 4241}），
+  预测文本与 accuracy 完全一致 → **温度 0 推理确定性与 bf16 无关边界翻转**，可复现性成立。
+- **修复（commit `6e40594`）**：E1 不再删除（.complete 跳训缺失时自动重建到 E1）；
+  双评估比对排除 answer_id、其余字段+顺序逐题一致才算 PASS。
+- 不改变训练参数/replay ratio/正式评估口径/数据/评估脚本。
+
 

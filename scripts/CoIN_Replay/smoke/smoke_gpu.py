@@ -40,12 +40,22 @@ def main():
     try:
         import flash_attn
         from flash_attn import flash_attn_func
-        q = torch.randn(2, 8, 64, 64, device=dev, dtype=torch.bfloat16)
-        k = torch.randn(2, 8, 64, 64, device=dev, dtype=torch.bfloat16)
-        v = torch.randn(2, 8, 64, 64, device=dev, dtype=torch.bfloat16)
+        q = torch.randn(2, 8, 64, 64, device=dev, dtype=torch.bfloat16, requires_grad=True)
+        k = torch.randn(2, 8, 64, 64, device=dev, dtype=torch.bfloat16, requires_grad=True)
+        v = torch.randn(2, 8, 64, 64, device=dev, dtype=torch.bfloat16, requires_grad=True)
         o = flash_attn_func(q, k, v)
+        check(torch.isfinite(o).all().item(), f"flash-attn {flash_attn.__version__} fwd OK")
         o.sum().backward()
-        check(torch.isfinite(o).all().item(), f"flash-attn {flash_attn.__version__} fwd/bwd OK")
+        # 梯度严格断言（评审 2026-09-02）：q/k/v grads 均存在、全部 finite、至少一个非零
+        gq, gk, gv = q.grad, k.grad, v.grad
+        grads_present = all(g is not None for g in (gq, gk, gv))
+        grads_finite = grads_present and all(torch.isfinite(g).all().item() for g in (gq, gk, gv))
+        nonzero = grads_present and any(bool((g != 0).any().item()) for g in (gq, gk, gv))
+        check(grads_present, "q/k/v grads 均存在")
+        check(grads_finite, "q/k/v grads 全部 finite")
+        check(nonzero, "q/k/v 至少一个非零梯度")
+        check(grads_present and grads_finite and nonzero,
+              f"flash-attn {flash_attn.__version__} bwd OK")
     except Exception as e:
         check(False, f"flash-attn 不可用: {type(e).__name__}: {e}")
 

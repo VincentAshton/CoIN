@@ -38,6 +38,18 @@ else
     echo "zero3_offload.json OK（无 scheduler/optimizer 段）"
 fi
 
+echo "==== [A5] protobuf==4.25.3（llama tokenizer 前置；评审 2026-09-02） ===="
+if "$PY" -c "import protobuf" 2>/dev/null; then
+    if "$PY" -c "import protobuf, importlib.metadata as im; v=im.version('protobuf'); assert v=='4.25.3', f'protobuf {v} != 4.25.3'"; then
+        echo "protobuf 4.25.3 OK"
+    else
+        echo "FAIL: protobuf 版本 != 4.25.3（新版 protobuf 使 sentencepiece_model_pb2 导入静默失败，tokenizer 会崩）"
+        FAIL=1
+    fi
+else
+    echo "protobuf 不可用（零依赖环境），跳过版本断言"
+fi
+
 echo "=================================================="
 if [ "$FAIL" -eq 0 ]; then
     echo "门禁 A 全部通过"

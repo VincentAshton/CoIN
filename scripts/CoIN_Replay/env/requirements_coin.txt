@@ -28,3 +28,6 @@ shortuuid
 requests==2.31.0
 scikit-learn==1.2.2
 packaging==24.0
+# protobuf==4.25.3（transformers 4.32 加载 llama tokenizer 必需：新版 protobuf 使
+# sentencepiece_model_pb2 导入静默失败 -> UnboundLocalError；作者锁定版本，见 EXPERIMENT_LOG 4.5 节）
+protobuf==4.25.3

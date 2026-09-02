@@ -40,8 +40,11 @@ else
 fi
 if torchrun --nproc_per_node="$(awk -F',' '{print NF}' <<<"$GPUS")" --master_port=29517 \
         scripts/CoIN_Replay/smoke/smoke_gpu.py; then ok "NCCL/flash-attn"; else bad "NCCL/flash-attn"; fi
-if "$PY" scripts/CoIN_Replay/smoke/smoke_ds.py --ds-config "$ROOT/scripts/zero3_offload.json" \
-        --gpus "$GPUS"; then ok "DeepSpeed 最小任务"; else bad "DeepSpeed 最小任务"; fi
+# smoke_ds 由 torchrun --standalone 启动（评审 2026-09-02 方案 A：与正式四卡分布式路径一致，
+# 避免 deepspeed 单进程 MPI 探测）；timeout 防进程挂死持续烧卡
+if timeout 900 torchrun --standalone --nproc_per_node="$(awk -F',' '{print NF}' <<<"$GPUS")" \
+        --master_port=29518 scripts/CoIN_Replay/smoke/smoke_ds.py \
+        --ds-config "$ROOT/scripts/zero3_offload.json"; then ok "DeepSpeed 最小任务"; else bad "DeepSpeed 最小任务"; fi
 
 # ---------------- C：迷你数据 round1→round2 ----------------
 step "C: 迷你数据真实训练（round1→round2，触发 LoRA 链 + replay）"

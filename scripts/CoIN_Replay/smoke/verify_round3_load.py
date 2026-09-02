@@ -116,6 +116,9 @@ def main():
     ]
     model_args, data_args, training_args = HfArgumentParser(
         (ModelArguments, DataArguments, TrainingArguments)).parse_args_into_dataclasses(argv)
+    # 镜像 train.py 第 115 行：transformers TrainingArguments __post_init__ 后冻结，
+    # 而 create_LLaVA_model 会写 training_args.tune_mm_mlp_adapter——不解冻即 FrozenInstanceError
+    training_args._frozen = False
 
     compute_dtype = torch.bfloat16 if training_args.bf16 else torch.float16
     print(f"[verify_round3] previous_task_model_path={model_args.previous_task_model_path}")

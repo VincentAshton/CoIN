@@ -165,8 +165,19 @@ def ckpt_validate(ckpt_dir: str, require_torch: bool = True) -> dict:
         report["note"] = "torch 不可用，仅文件级校验"
         return report
     # 参数级校验：加载 adapter 权重，检查 finite + 计算参数 hash
+    adapter_path = os.path.join(ckpt_dir, adapter)
+    # 尺寸守卫（评审 2026-09-02 方案 A）：真实 LoRA adapter（7B r=192 数百 MB、r=8 也 ≥1MB）
+    # 不可能 <1MB；DRY_RUN 假文件（64B 随机字节）在 torch 存在时随机抛
+    # ValueError(unsupported pickle protocol) 或 UnpicklingError，造成 DRY_RUN 测试 ~25% flake。
+    # 此处对 <1MB 文件确定性降级为文件级校验（真实验证严格性零损失）。
+    if os.path.getsize(adapter_path) < 1 << 20:
+        report["param_hash"] = None
+        report["finite"] = None
+        report["note"] = (f"adapter 文件 {os.path.getsize(adapter_path)}B <1MB，"
+                          f"视为非真实 checkpoint（DRY_RUN 假文件/占位），仅文件级校验")
+        return report
     try:
-        w = torch.load(os.path.join(ckpt_dir, adapter), map_location="cpu")
+        w = torch.load(adapter_path, map_location="cpu")
         if isinstance(w, dict):
             finite_ok = all(torch.isfinite(v).all().item() for v in w.values())
             buf = hashlib.sha256()

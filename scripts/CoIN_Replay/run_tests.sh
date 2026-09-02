@@ -39,11 +39,13 @@ else
 fi
 
 echo "==== [A5] protobuf==4.25.3（llama tokenizer 前置；评审 2026-09-02） ===="
-if "$PY" -c "import protobuf" 2>/dev/null; then
-    if "$PY" -c "import protobuf, importlib.metadata as im; v=im.version('protobuf'); assert v=='4.25.3', f'protobuf {v} != 4.25.3'"; then
+# protobuf 4.x 无顶层 `protobuf` 模块（import protobuf 必然失败），用 importlib.metadata 查版本
+PBV=$("$PY" -c "import importlib.metadata as im; print(im.version('protobuf'))" 2>/dev/null)
+if [ -n "$PBV" ]; then
+    if [ "$PBV" = "4.25.3" ]; then
         echo "protobuf 4.25.3 OK"
     else
-        echo "FAIL: protobuf 版本 != 4.25.3（新版 protobuf 使 sentencepiece_model_pb2 导入静默失败，tokenizer 会崩）"
+        echo "FAIL: protobuf 版本 $PBV != 4.25.3（新版 protobuf 使 sentencepiece_model_pb2 导入静默失败，tokenizer 会崩）"
         FAIL=1
     fi
 else

@@ -288,8 +288,14 @@ def load_model_from_previous_task(model, model_args):
     filename = os.path.join(previous_task_model_path, WEIGHTS_NAME)
     adapters_weights = torch.load(filename, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     # 本 fork 加固（工单 4）：加载前 key 完整性校验——missing/unexpected 一律失败
+    # 修复（评审 2026-09-02）：_norm 需剥离完整 "base_model." 前缀（11 字符，原 k[6:] 只剥 6 个），
+    # 并去掉适配器名段 ".default."（peft 0.4 单适配器 state_dict key 为 lora_A.weight 不带
+    # .default.，而 model.named_parameters() 带 .default.——两侧不一致导致 448 key 全判不匹配，
+    # 阻断 round≥2 的 previous-task LoRA 加载；canary C 首真跑暴露）
     def _norm(k):
-        return k[6:] if k.startswith("base_model.") else k
+        if k.startswith("base_model."):
+            k = k[len("base_model."):]
+        return k.replace(".default.", ".")
     expected = {_norm(k) for k in adapters_weights.keys()}
     actual = {_norm(n) for n, _ in model.named_parameters()
               if (".lora_A." in n or ".lora_B." in n) and ".default." in n}

@@ -269,4 +269,18 @@ canary B–E 云端首跑暴露 3 个问题（本地零 GPU 无法覆盖），�
 - 代码 commit：`bfbc1b0`（coin_lib.py + run_tests.sh）
 - 文档 commit（本段）：见 git log HEAD（部署锁定 HEAD）
 
+### 4.9 previous-task LoRA key 校验缺陷修复（2026-09-02，评审批准）
+
+- **根因**：llava_trainer.py `load_model_from_previous_task` 的 `_norm` 两个缺陷——
+  ① `k[6:]` 剥前缀（"base_model." 为 11 字符）；② 未处理适配器名段 `.default.`
+  （peft 0.4 单适配器 state_dict key 为 `...lora_A.weight` 不带 .default.，
+  model.named_parameters() 为 `...lora_A.default.weight` 带）→ 448 key 全判 missing/unexpected。
+  该检查为 6ff09a5 加固新增但 DRY_RUN 从不触发真实训练路径，canary C round2 首真跑暴露。
+- **影响**：round≥2 的 previous-task LoRA 加载必失败 → 正式 4 轮 replay 实验无法运行。
+- **修复（commit `f8ede2f`）**：`_norm` 剥完整前缀（len("base_model.")）+ 去 `.default.` 段，
+  两侧一致归一化；`set_peft_model_state_dict` 实际加载逻辑不动。
+- **验证**：真实 key 格式（adapter 448 keys 全为 base_model.model.model....lora_A|B.weight，
+  无 .default.）归一化后两侧完全 MATCH。
+- 不改变训练参数/replay ratio/正式评估口径/数据。
+
 

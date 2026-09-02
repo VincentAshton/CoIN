@@ -341,4 +341,22 @@ canary B–E 云端首跑暴露 3 个问题（本地零 GPU 无法覆盖），�
 - D✓ E：训练复用断点跳过，probe/双评估按原流程（E 不涉及本次改动）
 - canary v5 将在 v4 结束后重跑（C 从头真实训练 + 修复后的断言 C）
 
+### 4.13 canary v5 全绿（2026-09-02，部署锁定 HEAD=7eaa26c）
+
+- A 静态+单测 PASS（run_tests v4 独立验证 exit 0）
+- B GPU 冒烟 PASS（NCCL/flash-attn 4×、DeepSpeed 最小任务）
+- C 从头真实训练全通：
+  - round1 ScienceQA 240 样本 30 steps（loss 0.758，ckpt param_hash 真实可用）
+  - round2 TextVQA 240 样本 + replay 24 条（plan optimizer_steps=3.0，trainer_state global_step=3，末次 LR=0.0 余弦终点）
+  - 断言 A PASS：replay N=24、有效 batch=8（world4×batch2×accum1）、global_step>=2 + LR 记录
+  - 断言 B PASS：tensor 级 ckpt-tensor-diff——changed_tensor_count=448/448、
+    l2_norm_diff=4.410048、max_abs_diff=0.000305、task hash b6c5704a… != replay cfef41dc…
+    （均 bf16，keys/shapes 一致，全 finite）
+  - 断言 C PASS：verify_round3_load——previous=round2_replay_llava_lora，
+    missing=0/unexpected=0（448），加载后 float32 hash 84bd558a… == round2_replay
+    == 84bd558a…，!= round2_task 3b4d58c6…，all_finite/shapes_match
+- D 故障注入 PASS；E 训练复用 .complete，probe 两载一致 PASS、双评估 4241 条
+  （排除 answer_id）逐题一致 PASS
+- CANARY 全部通过 → 允许启动正式 sweep（未启动；ImageNet 数据门禁未过前只算环境快照）
+
 

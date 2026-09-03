@@ -53,6 +53,10 @@ export TASKS_JSON="${TASKS_JSON:-[\"ScienceQA\",\"TextVQA\",\"ImageNet\",\"GQA\"
 export MASTER_PORT="${MASTER_PORT:-29600}"
 export ENFORCE_MIN_STEPS="${ENFORCE_MIN_STEPS:-0}"
 export ALLOW_SINGLE_STEP_REPLAY="${ALLOW_SINGLE_STEP_REPLAY:-0}"
+# 方案 D（2026-09-04 批准设计）：replay 段 gradient_accumulation 覆盖值。
+# 所有 ratio / round 必须用同一值（正式 sweep 要求显式 export REPLAY_ACCUM=1）。
+# 空 = 不覆盖（replay 段继承 ACCUM=16，旧语义；兼容测试/回退路径，正式跑禁止留空）。
+export REPLAY_ACCUM="${REPLAY_ACCUM:-}"
 export DRY_RUN="${DRY_RUN:-0}"
 export PREFLIGHT_ARGS="${PREFLIGHT_ARGS:-}"
 
@@ -171,23 +175,26 @@ write_manifest() {
 }
 
 # ---- 训练（工单 3/8）-------------------------------------------------------
-train_one() {  # $1=name $2=data_path $3=ckpt $4=prev(可空) $5=epochs $6=replay_k(可空)
+train_one() {  # $1=name $2=data_path $3=ckpt $4=prev(可空) $5=epochs $6=replay_k(可空) $7=accum_override(可空)
   local name="$1" data="$2" ckpt="$3" prev="$4" epochs="$5" replay_k="${6:-}"
+  # 方案 D：replay 段经第 7 参覆盖 accum（task 段不传 → 恒 $ACCUM=16）；空串回退 $ACCUM
+  local accum="${7:-$ACCUM}"
   local logf="$RES_ROOT/logs/${name}.log"
-  # 训练分辨率报告（工单 8）
+  # 训练分辨率报告（工单 8；accum 用覆盖后值，plan 与实参同源防错位）
   local plan
-  plan=$(py train-plan --data-json "$data" --batch "$BATCH" --accum "$ACCUM" \
+  plan=$(py train-plan --data-json "$data" --batch "$BATCH" --accum "$accum" \
          --world "$WORLD" --lr "$LR" --warmup-ratio "$WARMUP_RATIO" \
          --epochs "$epochs" --name "$name" ${replay_k:+--replay-k "$replay_k"})
   echo "==== 训练分辨率报告 [$name] ===="
   echo "$plan" | python3 -m json.tool
+  echo "$plan" > "$RES_ROOT/logs/${name}.plan.json"   # 留痕（round manifest 引用）
   if [[ "$ENFORCE_MIN_STEPS" == "1" ]]; then
     local flags
-    flags=$(echo "$plan" | python3 -c "import json,sys; p=json.load(sys.stdin); print(p['flag_replay_single_step'], p['flag_first_lr_zero'], p['flag_warmup_covers_all'])")
+    flags=$(echo "$plan" | python3 -c "import json,sys; p=json.load(sys.stdin); print(p['flag_replay_single_step'], p['flag_first_lr_zero'], p['flag_warmup_covers_all'])" 2>/dev/null || echo "True False False")
     read -r f1 f2 f3 <<< "$flags"
     if [[ "$f1" == "True" || "$f2" == "True" || "$f3" == "True" ]]; then
       if [[ "$ALLOW_SINGLE_STEP_REPLAY" != "1" ]]; then
-        die "ENFORCE_MIN_STEPS=1 且训练计划异常（single_step=$f1 first_lr_zero=$f2 warmup_covers_all=$f3）。如需强制继续请显式 ALLOW_SINGLE_STEP_REPLAY=1"
+        die "ENFORCE_MIN_STEPS=1 且训练计划异常（ds_single_step=$f1 first_lr_zero=$f2 warmup_covers_all=$f3）。如需强制继续请显式 ALLOW_SINGLE_STEP_REPLAY=1"
       fi
       log "WARN: 训练计划异常但 ALLOW_SINGLE_STEP_REPLAY=1，继续"
     fi
@@ -211,7 +218,7 @@ train_one() {  # $1=name $2=data_path $3=ckpt $4=prev(可空) $5=epochs $6=repla
     --num_train_epochs "$epochs"
     --per_device_train_batch_size "$BATCH"
     --per_device_eval_batch_size 16
-    --gradient_accumulation_steps "$ACCUM"
+    --gradient_accumulation_steps "$accum"
     --evaluation_strategy no --save_strategy epoch
     --learning_rate "$LR" --weight_decay 0. --warmup_ratio "$WARMUP_RATIO"
     --lr_scheduler_type "$LR_SCHEDULER_TYPE" --logging_steps 1
@@ -330,16 +337,18 @@ run_round() {
       --out "$replay_json" "${nested_args[@]}"
     local k
     k=$(python3 -c "import json; m=json.load(open('$replay_json.manifest.json')); print(m['output']['N'])")
-    train_one "round${j}_replay" "$replay_json" "$replay_ckpt" "$task_ckpt" "$REPLAY_EPOCHS" "$k"
-    # 断言 task hash != replay hash（replay 后参数确实变化）——工单 4 canary 证明
-    local h_task h_replay
-    h_task=$(py ckpt-validate "$task_ckpt" | python3 -c "import json,sys; print(json.load(sys.stdin).get('param_hash') or '')")
-    h_replay=$(py ckpt-validate "$replay_ckpt" | python3 -c "import json,sys; print(json.load(sys.stdin).get('param_hash') or '')")
-    if [[ -n "$h_task" && -n "$h_replay" ]]; then
-      [[ "$h_task" != "$h_replay" ]] || die "task checkpoint 与 replay checkpoint 参数 hash 相同（replay 未生效？）"
-      log "task hash != replay hash 断言通过"
+    # 方案 D：replay 段 accum = REPLAY_ACCUM（正式跑=1；task 段不受影响恒 16）
+    train_one "round${j}_replay" "$replay_json" "$replay_ckpt" "$task_ckpt" "$REPLAY_EPOCHS" "$k" "${REPLAY_ACCUM:-}"
+    # 断言 replay 真实更新（评审 C-1/C-3 铁证，2026-09-04 方案 D 强化）：
+    # 非 DRY_RUN 下走 ckpt-tensor-diff（changed≥1 + 规范化 hash 不同 + 全 finite），
+    # 替代弱 param_hash 比较（bf16 无 torch 时可能静默跳过——禁止）
+    if [[ "$DRY_RUN" == "1" ]]; then
+      log "DRY_RUN：跳过 tensor-diff 强化断言（假 checkpoint 无真实训练语义）"
     else
-      log "param_hash 不可用（无 torch），跳过 task!=replay 参数断言"
+      if ! py ckpt-tensor-diff "$task_ckpt" "$replay_ckpt"; then
+        die "replay 未产生真实参数更新（ckpt-tensor-diff 失败）：task=$task_ckpt replay=$replay_ckpt"
+      fi
+      log "ckpt-tensor-diff 通过：replay 真实更新已确认（changed>0 + hash≠ + finite）"
     fi
     eval_ckpt="$replay_ckpt"
   fi
@@ -352,8 +361,13 @@ run_round() {
   # round manifest（原子）+ 轮次标记
   local ckrep
   ckrep=$(py ckpt-validate "$eval_ckpt")
+  # 方案 D：round manifest 并入 replay 段 train-plan（per-rank micro/HF/DS 步数/LR 摘要）
+  local rp_plan="{}"
+  if [[ -f "$RES_ROOT/logs/round${j}_replay.plan.json" ]]; then
+    rp_plan=$(cat "$RES_ROOT/logs/round${j}_replay.plan.json")
+  fi
   py round-manifest-write --res-root "$RES_ROOT" --round "$j" --info-json \
-    "$(python3 -c "import json,sys; print(json.dumps({'task': '$task', 'eval_ckpt': '$eval_ckpt', 'task_ckpt': '$task_ckpt', 'replay_ckpt': '$replay_ckpt', 'replay_data': '$replay_json', 'ckpt': json.loads(sys.argv[1])}))" "$ckrep")" >/dev/null
+    "$(python3 -c "import json,sys; print(json.dumps({'task': '$task', 'eval_ckpt': '$eval_ckpt', 'task_ckpt': '$task_ckpt', 'replay_ckpt': '$replay_ckpt', 'replay_data': '$replay_json', 'ckpt': json.loads(sys.argv[1]), 'replay_plan': json.loads(sys.argv[2])}))" "$ckrep" "$rp_plan")" >/dev/null
   touch "$marker"
   log "round$j 完成（round${j}_manifest.json + .round${j}_done）"
 }

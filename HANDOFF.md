@@ -239,3 +239,32 @@ bash scripts/CoIN_Replay/run_sweep.sh 0.1
   {"ImageNet":"ImageNet_withlabel"}'）
 - 实例关机安全：数据/代码/日志全在 coinssd（/root/data）持久卷；gate 临时产物在
   /root/data/coin/tmp/single_step_gate（保留，评审可能需要）；重租 4×A100 挂 coinssd 即可续接
+
+## 11.2 方案 D 实施完成（2026-09-04，全链路审计+实机验证通过，正式 sweep 停等批准）
+
+- **用户否决候选 A**（0.01→1 / 0.1→8 的 ratio 专属 accum = 实验混杂）；批准 **方案 D**：
+  task accum=16 冻结不变；replay accum=1 全 ratio/round 统一（REPLAY_ACCUM=1）；
+  task 有效 batch 896、replay 有效 batch 56（不再声称 replay 896）。
+- **权威 commit = 8b0a1ac**（experiment/coin-replay-presweep-20260903；本地=GitHub=云端
+  三端一致，2026-09-04 同步）。相对 d7f9d1c 改动：run_replay_exp.sh（train_one 第 7 参 accum 覆盖、plan/实参
+  同源、replay 后强制 ckpt-tensor-diff）、coin_lib.py（per_rank_micro_batches、train_plan
+  多口径字段、manifest replay_accum/replay_effective_batch/allow_single_step_replay、
+  manifest-cross-check）、run_sweep.sh（静态禁止 ratio 专属 accum）、single_step_gate.sh +
+  single_step_summary.py（REPLAY_ACCUM 参数化 + gas1 判定）、tests +16、RUNBOOK/EXPERIMENT_LOG。
+- **验证全绿**：run_tests Ran 89 OK（云端 coin env）；GPU 单步门禁 gas1：N=127→3 真步、
+  N=473→9、N=1272→23（gs=M，tensor 448/448 changed + hash differs + finite，无 NaN/OOM）；
+  Canary A–E 全 PASS；四任务 preflight RC=0；dry-run 0.1/0.01 RC=0 + .complete；
+  cross-manifest diff pass（仅 ratio 差异）。证据：logs/presweep/gas1_gate_20260904/、
+  logs/canary_20260904/、EXPERIMENT_LOG 4.16、本地审计包 /home/vincent/coin_audit_20260904/。
+- **计数权威（审计结论）**：HF global_step/LR 日志不可信；DS engine.global_steps/_step_applied
+  权威；tensor diff 铁证。真步 = per-rank micro // gas（BatchSamplerShard even 补齐，rank 均匀；
+  0.01 r2/r3/r4 gas1 = 3/9/32、0.1 = 23/85/317）。旧 floor(N/896) 低估边界（N=895 实 1 真步；
+  0.01 r4 gas16 模拟 2 vs 旧报 1——正式 0.01 观察项）。
+- **正式 sweep 命令（等用户批准后执行；先 0.1，验收停，0.01 另行批准）**：
+  export REPLAY_ACCUM=1 ENFORCE_MIN_STEPS=1 GPUS=0,1,2,3
+  export PREFLIGHT_ARGS='--layout-map {"ImageNet":"ImageNet_withlabel"}'
+  bash scripts/CoIN_Replay/run_sweep.sh 0.1
+  （ALLOW_SINGLE_STEP_REPLAY 不再需要=0；REPLAY_ACCUM 禁止按 ratio 变化）
+- 时长/费用实测口径：0.1 ≈ 8-8.5h、0.01 ≈ 7.2-7.5h、两 ratio ≈ 15.5-16h ≈ ¥435-560
+  （gas16 48-56s/step、gas1 4-8s/step 实测；旧 170s/step 外推作废）。
+- 云端实例 30267 在线（2026-09-04 验证完成）；正式 sweep 启动前应确认无残留进程。

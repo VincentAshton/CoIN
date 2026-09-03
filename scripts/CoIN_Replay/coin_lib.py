@@ -88,6 +88,51 @@ def env_versions():
 # 训练分辨率报告（工单 8）
 # ---------------------------------------------------------------------------
 
+def per_rank_micro_batches(N: int, batch: int = 14, world: int = 4) -> list:
+    """BatchSamplerShard（accelerate 0.21, split_batches=False, even_batches=True,
+    drop_last=False）下每个 rank 实际 yield 的 micro-batch 数。
+
+    语义来源：DataLoader(batch_size, sampler=LengthGroupedSampler) →
+    accelerator.prepare → BatchSamplerShard._iter_with_no_split。even 补齐不保证
+    rank 均匀（尾部 partial batch 的持有 rank 可能被跳过）→ 常见 ±1 不均
+    （如 N=1272 → [23,23,22,23]）。返回 per-rank yield 计数。
+    2026-09-04 审计移植（audit/matrix_static_sim.py 同逻辑，逐行对照源码）。
+    """
+    if N <= 0:
+        return [0] * world
+    B = -(-N // batch)  # 底层 BatchSampler 产出的 batch 数
+    # batch 长度序列：前 B-1 个满长；最后 = N - batch*(B-1)（整除时也满长）
+    blen = [batch] * (B - 1)
+    blen.append(N - batch * (B - 1) if N % batch else batch)
+
+    counts = []
+    for p in range(world):
+        cnt = 0
+        bty = None  # 本进程最后持有的 batch 长度
+        initial_n = sum(blen[:min(world, B)])  # initial_data 样本数（内容无关，仅数量）
+        for idx, ln in enumerate(blen):
+            if idx % world == p:
+                bty = ln
+            if idx % world == world - 1 and ln == batch:
+                cnt += 1
+                bty = None
+        if initial_n > 0:
+            if bty == batch:
+                cnt += 1  # 尾部 a：满长 bty 补 yield
+            # 尾部回绕补齐（源码 even_batches 分支）：
+            # 源码: for 结束 idx=B-1 → 满长尾: batch=[]; idx+=1 → idx=B（从 B 起补）
+            #       partial 尾: idx 保持 B-1（partial batch 续 initial_data 补满，从 B-1 起补）
+            idx2 = B if blen[-1] == batch else B - 1
+            carry = 0 if blen[-1] == batch else blen[-1]  # 最后 partial batch 长度
+            while idx2 % world != 0 or carry > 0:
+                if idx2 % world == p:
+                    cnt += 1
+                carry = 0
+                idx2 += 1
+        counts.append(cnt)
+    return counts
+
+
 def train_plan(data_json: str, batch: int, accum: int, world: int, lr: float,
                warmup_ratio: float, epochs: float, name: str,
                replay_k: int = None, max_len: int = None) -> dict:
@@ -96,14 +141,21 @@ def train_plan(data_json: str, batch: int, accum: int, world: int, lr: float,
     if N == 0:
         raise ValueError(f"train_plan: {data_json} 为空")
     total_batch = batch * accum * world
-    steps_per_epoch = -(-N // total_batch)  # ceil
-    max_steps = max(1, -(-(epochs * steps_per_epoch) // 1))
+    micro = per_rank_micro_batches(N, batch, world)  # per-rank micro（BatchSamplerShard 语义）
+    m_min, m_max = min(micro), max(micro)
+    # HF 语义（每 rank 独立 len//gas，兜底 1）——rank0 口径
+    hf_steps_per_epoch = max(1, (m_min * epochs) // accum) if epochs >= 1 else 0
+    hf_steps = max(1, -(-(m_max * epochs) // accum))  # 旧 ceil 口径（多 rank 取 max）
+    # DS 权威口径：rank 齐步共同完成的真步数 = floor(min_micro/gas)
+    ds_updates = int((m_min * epochs) // accum)
+    max_steps = hf_steps  # 保留旧语义（门禁 flag 兼容）
     warmup_steps = int(warmup_ratio * max_steps)
     if warmup_steps > 0:
         first_step_lr = lr * (1.0 / warmup_steps)  # 首个更新步的实际 LR（线性 warmup）
     else:
         first_step_lr = lr
     consumed = N * epochs
+    yield_samples = sum(micro) * batch
     plan = {
         "name": name,
         "N": N,
@@ -112,15 +164,26 @@ def train_plan(data_json: str, batch: int, accum: int, world: int, lr: float,
         "world_size": world,
         "grad_accum": accum,
         "total_train_batch_size": total_batch,
-        "optimizer_steps": max_steps,
-        "steps_per_epoch": steps_per_epoch,
+        "effective_batch": total_batch,
+        "optimizer_steps": max_steps,   # 旧字段（HF ceil 口径，保留兼容门禁）
+        "steps_per_epoch": hf_steps_per_epoch,
+        # ---- 2026-09-04 审计新增：准确多口径报告（禁止单一 ceil 掩盖语义）----
+        "per_rank_micro": micro,                         # BatchSamplerShard 实测语义
+        "per_rank_micro_min": m_min,
+        "per_rank_micro_max": m_max,
+        "microbatch_remainder": (m_min * epochs) % accum,  # 尾部未满 accum 的 micro
+        "discarded_or_uncommitted_microbatches": int(
+            (m_min * epochs) - ds_updates * accum + (m_max - m_min) * epochs),
+        "sampler_padding": max(0, yield_samples - N),      # even 补齐重复样本数
+        "hf_planned_steps": max(1, hf_steps_per_epoch),    # HF 计划（rank0/min 口径）
+        "ds_expected_updates": ds_updates,                 # DS 权威真步（rank 齐步下界）
         "warmup_steps": warmup_steps,
         "lr": lr,
         "first_step_lr": round(first_step_lr, 10),
         "last_step_lr": round(lr, 10),
         "consumed_samples": int(consumed),
         "max_len": max_len,
-        "flag_replay_single_step": max_steps <= 1,
+        "flag_replay_single_step": ds_updates <= 1,   # 改以 DS 真步判 single-step（原 HF ceil 高估）
         "flag_first_lr_zero": first_step_lr == 0.0,
         "flag_warmup_covers_all": warmup_steps >= max_steps,
     }
@@ -394,7 +457,8 @@ CONFIG_FIELDS = [
     "ratio", "tasks", "T", "model_base", "vision_tower", "projector",
     "lora_r", "lora_alpha", "lora_dropout", "lr", "mm_projector_lr",
     "epochs_per_task", "replay_epochs", "seed", "data_seed", "sample_mode",
-    "per_device_batch", "grad_accum", "world_size", "effective_batch",
+    "per_device_batch", "grad_accum", "replay_accum", "world_size", "effective_batch",
+    "replay_effective_batch", "allow_single_step_replay",
     "lr_scheduler_type", "warmup_ratio", "precision", "grad_ckpt",
     "ds_config", "gpus", "model_max_length", "temperature_eval",
 ]
@@ -412,6 +476,8 @@ def compute_config(env: dict) -> dict:
     world = len(str(get("GPUS", "0,1,2,3")).split(","))
     batch = int(get("BATCH", "14", required=True))
     accum = int(get("ACCUM", "16", required=True))
+    replay_accum_raw = get("REPLAY_ACCUM")  # 空=未设置（replay 段继承 task accum）
+    replay_accum = int(replay_accum_raw) if replay_accum_raw else None
     cfg = {
         "ratio": float(get("RATIO", required=True)),
         "tasks": json.loads(get("TASKS_JSON", '["ScienceQA","TextVQA","ImageNet","GQA"]')),
@@ -430,8 +496,11 @@ def compute_config(env: dict) -> dict:
         "sample_mode": get("SAMPLE_MODE", "prefix"),
         "per_device_batch": batch,
         "grad_accum": accum,
+        "replay_accum": replay_accum,
         "world_size": world,
         "effective_batch": batch * accum * world,
+        "replay_effective_batch": (batch * world * replay_accum) if replay_accum else None,
+        "allow_single_step_replay": int(get("ALLOW_SINGLE_STEP_REPLAY", "0")),
         "lr_scheduler_type": get("LR_SCHEDULER_TYPE", "cosine"),
         "warmup_ratio": float(get("WARMUP_RATIO", "0.03")),
         "precision": get("PRECISION", "bf16+tf32"),
@@ -527,6 +596,47 @@ def round_manifest_write(res_root: str, j: int, info: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# cross-run manifest 校验（方案 D：0.1 与 0.01 除 ratio 外完全一致）
+# ---------------------------------------------------------------------------
+
+CROSS_ALLOWED_DIFF = {"ratio"}  # 唯一允许的 run_manifest config 差异字段
+
+
+def manifest_cross_check(res_a: str, res_b: str) -> dict:
+    """比较两个结果目录的 run_manifest.json config。断言：除 ratio（与派生输出路径）
+    外所有 CONFIG_FIELDS 完全一致——即 0.1/0.01 的 replay_accum、batch、LR、
+    scheduler、seed、模型、数据、代码 hash 相同。"""
+    def load(p):
+        path = os.path.join(p, "run_manifest.json")
+        if not os.path.isfile(path):
+            raise ValueError(f"缺 run_manifest.json: {path}")
+        return json_load(path)
+
+    ma, mb = load(res_a), load(res_b)
+    ca, cb = ma["config"], mb["config"]
+    diffs = {}
+    for k in CONFIG_FIELDS:
+        if k in CROSS_ALLOWED_DIFF:
+            continue
+        if ca.get(k) != cb.get(k):
+            diffs[k] = {"a": ca.get(k), "b": cb.get(k)}
+    common = set(ca) & set(cb)
+    only_a = set(ca) - set(cb)
+    only_b = set(cb) - set(ca)
+    return {
+        "pass": not diffs and not only_a and not only_b,
+        "diffs": diffs,
+        "config_keys_only_a": sorted(only_a),
+        "config_keys_only_b": sorted(only_b),
+        "ratio_a": ca.get("ratio"), "ratio_b": cb.get("ratio"),
+        "replay_accum_a": ca.get("replay_accum"), "replay_accum_b": cb.get("replay_accum"),
+        "replay_effective_batch_a": ca.get("replay_effective_batch"),
+        "replay_effective_batch_b": cb.get("replay_effective_batch"),
+        "config_hash_a": ma.get("config_hash"), "config_hash_b": mb.get("config_hash"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # CLI 入口
 # ---------------------------------------------------------------------------
 
@@ -588,6 +698,11 @@ def main():
         a = _kv(sys.argv[2:])
         info = json.loads(a["--info-json"])
         print(json.dumps({"path": round_manifest_write(a["--res-root"], int(a["--round"]), info)}))
+    elif cmd == "manifest-cross-check":
+        a = _kv(sys.argv[2:])
+        rep = manifest_cross_check(a["--res-root-a"], a["--res-root-b"])
+        print(json.dumps(rep, ensure_ascii=False))
+        sys.exit(0 if rep["pass"] else 1)
     else:
         raise SystemExit(f"未知命令: {cmd}")
 

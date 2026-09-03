@@ -3,6 +3,10 @@
 # 用法:
 #   bash scripts/CoIN_Replay/run_sweep.sh            # 跑 0.1 0.01
 #   bash scripts/CoIN_Replay/run_sweep.sh 0.1 0.01
+# 方案 D（2026-09-04）：REPLAY_ACCUM 必须由调用方在外部显式 export（正式值=1），
+# 本脚本【禁止】按 ratio 隐式设置不同 REPLAY_ACCUM（ratio 专属 accum 已被评审拒绝，
+# 会造成实验混杂）。run_sweep 也不得覆盖已 export 的 REPLAY_ACCUM。
+#   export REPLAY_ACCUM=1 && bash scripts/CoIN_Replay/run_sweep.sh 0.1
 set -euo pipefail
 
 RATIOS=("$@")

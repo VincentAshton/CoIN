@@ -63,15 +63,17 @@ huggingface-cli download liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1
 ```bash
 cd CoIN
 # 前置检查（脚本内 preflight：模型/数据/脚本/环境缺失即终止）
-bash scripts/CoIN_Replay/run_replay_exp.sh 0.1     # 先跑基线
-bash scripts/CoIN_Replay/run_replay_exp.sh 0.01    # 再跑低比例
-# 或一条命令顺序扫：
-bash scripts/CoIN_Replay/run_sweep.sh 0.1 0.01
-
+# 方案 D（2026-09-04 批准，全链路审计+实机验证通过）：
+#   task 段 accum=16（有效 batch 896 与论文一致）保持不变；
+#   replay 段 accum=1（REPLAY_ACCUM=1，全 ratio/round 同一值，有效 batch 56）——
+#   修复 DS zero3 accum16 下小 replay 段 0 真实更新的 No-Go（详见 HANDOFF §11.2）。
+export REPLAY_ACCUM=1 ENFORCE_MIN_STEPS=1 GPUS=0,1,2,3
+export PREFLIGHT_ARGS='--layout-map {"ImageNet":"ImageNet_withlabel"}'
+bash scripts/CoIN_Replay/run_sweep.sh 0.1     # 正式 sweep 按批准：先 0.1（0.01 另行批准）
 # 常用覆盖（默认值见脚本头部）：
-# GPUS=0,1,2,3  ACCUM=16（4卡保持有效batch=896与论文一致）  SAMPLE_MODE=random
-# SEED=1234  LORA_R=192  LR=2e-4  REPLAY_EPOCHS=1
+# SEED=1234  LORA_R=192  LR=2e-4  REPLAY_EPOCHS=1  ACCUM=16（task 段，勿改）
 # DS_CONFIG=scripts/zero3.json   # 冒烟通过后可选：去掉 CPU offload 提速
+# 严禁：按 ratio 设置不同 REPLAY_ACCUM（run_sweep 已静态禁止）；REPLAY_ACCUM 留空 = 旧语义
 ```
 
 结果落盘结构：
@@ -103,7 +105,10 @@ cat results/CoIN_Replay/ratio_0.01/coin_metrics.json
    TextVQA=val.json + TextVQA_0.5.1_val.json、ImageNet=test.json、GQA=test.json + testdev_balanced）。
 2. **Replay 数据默认 prefix（与 TRACE 一致）**：取前序任务 train.json 的前 ratio 子集，
    不重新随机抽样；如要随机抽样：`SAMPLE_MODE=random`（口径与 TRACE 不同，需在汇报中说明）。
-3. **有效 batch 一致性**：4 卡必须 ACCUM=16（14×4×16=896 = 论文 8 卡×8×14）。
+3. **有效 batch 双口径（方案 D）**：task 段 4 卡 ACCUM=16 → 896/真步（论文一致）；
+   replay 段 REPLAY_ACCUM=1 → 56/真步（每 micro 即真实 optimizer step）。
+   原「有效 batch 896 全段一致」因 DS 0.14 不提交短 replay 尾部（accum16 下 N<896 → 0 真步）
+   而作废——方案 D 为设计修订，replay 有效 batch 一律按 56 表述，不再声称 896。
    改 GPU 数/超参 = 重跑两个比例。
 4. **eval 脚本里 create_prompt 已容错**（只影响 Reasoning Capability，不影响 Truth Alignment）。
 5. **checkpoint 目录名必须含 "lora"**（builder.py 按名字判断），脚本已用 `<Task>_llava_lora`。

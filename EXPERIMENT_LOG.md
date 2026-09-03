@@ -409,4 +409,37 @@ canary B–E 云端首跑暴露 3 个问题（本地零 GPU 无法覆盖），�
   - 决策后续接：批准 A → 改 run_replay_exp.sh（评审）→ run_tests 补 plan 真步用例 →
     重跑门禁（预期 changed=448、hash 不同、真步≥2）→ 阶段 III/IV（仅 0.1）
 
+## 4.16 方案 D 全链路审计 + 实机验证（2026-09-04，用户任务书批准）
+
+- 用户否决候选 A（ratio 专属 accum：0.01→1 / 0.1→8）——两组有效 batch 不同造成实验混杂；
+  批准方案 D：**task accum16 冻结 + 所有 ratio/round 的 replay accum=1 统一**。
+- 跨层语义审计（实装版本源码逐层：run_replay_exp→train_mem→transformers4.32→accelerate0.21→
+  deepspeed0.14，SHA256 8/8 与云端实装一致）权威计数结论：HF planned/global_step 与 LR 日志
+  **不可信**（DS wrapper optimizer.step=no-op + was_run 恒 True）；权威 = DS engine.global_steps/
+  _step_applied + tensor diff 铁证；真步 = per-rank micro M // gas（M 由 BatchSamplerShard
+  even 补齐，全 rank 均匀）。审计报告 audit/audit_cross_layer.md + audit_matrix_static.md。
+- 静态矩阵（模拟器移植 accelerate BatchSamplerShard 精确语义，修正自身 partial-尾回绕 bug）：
+  0.01 r2/r3/r4 gas1 真步 = 3/9/32；0.1 = 23/85/317——与任务书预期完全一致。
+  旧 floor(N/896) 低估边界（N=895 实为 1 真步；0.01 r4 gas16 模拟 2 vs 旧报告 1，待正式 0.01 观察）。
+- 代码改动（run_replay_exp.sh train_one 第 7 参 accum 覆盖 + coin_lib per_rank_micro_batches/
+  train_plan 多口径字段（hf_planned_steps/ds_expected_updates/microbatch_remainder/sampler_padding）
+  + manifest replay_accum/replay_effective_batch + manifest-cross-check cmd + run_sweep 静态禁
+  ratio 专属 + single_step_gate/summary REPLAY_ACCUM 参数化 + tests +16（Ran 89=73+16））；
+  云端工作区 apply 未 commit 验证（验证通过后 commit 见下文）。
+- **GPU 实机验证（4×A100）**：单步门禁 gas1 全 PASS——N=127 gs=3（=M）、N=473 gs=9、
+  N=1272 gs=23（r2_010 独立验证）；三场景 tensor 448/448 changed + L2>0 + hash differs + finite；
+  无 NaN/OOM/NCCL。Canary A–E 重跑全 PASS（run_tests 89、smoke、C 迷你链 gs=3、D 故障注入、
+  E SQA round1+probe+双 eval 逐题一致）。四任务 preflight RC=0；presweep dry-run 0.1/0.01 RC=0
+  + .complete；cross-manifest diff pass（0.1 vs 0.01 仅 ratio 差异；replay_accum=1、effective
+  896/56、round2 per_rank_micro [23×4] 与静态模拟一致、sampler_padding=16 精确命中）。
+- 性能实测：gas16 47.8-55.9s/step（锚点一致）；gas1 4.3-8.0s/step（CPUAdam offload 主导，
+  每样本成本 ~2×）；0.1 ≈ 8-8.5h、0.01 ≈ 7.2-7.5h、两 ratio ≈ 15.5-16h、¥435-560
+  （旧 ¥1,140/36-40h 基于 170s/step 高估，作废）。详情 audit/cost_estimate.md。
+- 日志/证据：云端 logs/presweep/gas1_gate_20260904/（GATE_PASS summary）、
+  logs/canary_20260904/（canary.log、preflight_4task.log RC=0、dryrun_*.log RC=0）、
+  logs/audit_freeze_20260904/（env/logs SHA256 快照）。
+- 结论：方案 D 全部验证通过 → commit 锁定（本地=GitHub=云端三端同步）→
+  **正式 sweep 仍未启动，停等用户批准**（批准命令：export REPLAY_ACCUM=1 ENFORCE_MIN_STEPS=1
+  + PREFLIGHT_ARGS layout-map → bash run_sweep.sh 0.1，先 0.1 验收后再批 0.01）。
+
 

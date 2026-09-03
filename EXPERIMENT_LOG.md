@@ -208,7 +208,7 @@
 - 指令数据（hf-mirror 已下载，sha256 见部署记录）：ScienceQA 12726/4241、TextVQA 34602/5000、ImageNet 129833/5050、GQA 72140/12578（train/test|val）
 - 模型三件套：全部 gated:false，待下载（lmsys/vicuna-7b-v1.5、openai/clip-vit-large-patch14-336、liuhaotian/llava-v1.5-mlp2x-336px-pretrain-vicuna-7b-v1.5）
 - 图片：ScienceQA（GDrive 实例不可达 → 需 HF 镜像替代）、TextVQA（fbail GET 206 可下）、GQA（stanford 200 可下）、ImageNet（官方注册凭据 → **阻塞，待用户提供途径**；canary 不需要）
-- ⚠️ 正式 sweep 必须 `PREFLIGHT_ARGS='--layout-map {"ImageNet":"ImageNet_withlabel","GQA":"."}'`（json 图片路径首段分别为 ImageNet_withlabel 与 `./`）；canary（ScienceQA/TextVQA）不受影响
+- ⚠️ 正式 sweep 必须 `PREFLIGHT_ARGS='--layout-map {"ImageNet":"ImageNet_withlabel"}'`（2026-09-03 实证修正：GQA json 路径带 `./` 前缀，但 preflight_data.py 用 `Path.parts` 判断会折叠 `./` → 实测首段='GQA'=默认期望，**无需且不可**给 GQA 配 "." 条目——永不匹配，四任务首跑 FAIL 实证；仅 ImageNet 需映射）；canary（ScienceQA/TextVQA）不受影响
 
 ### 4.4 部署日志
 
@@ -358,5 +358,28 @@ canary B–E 云端首跑暴露 3 个问题（本地零 GPU 无法覆盖），�
 - D 故障注入 PASS；E 训练复用 .complete，probe 两载一致 PASS、双评估 4241 条
   （排除 answer_id）逐题一致 PASS
 - CANARY 全部通过 → 允许启动正式 sweep（未启动；ImageNet 数据门禁未过前只算环境快照）
+
+### 4.14 ImageNet 数据就位 + 四任务门禁 + presweep GO（2026-09-03）
+
+- **ImageNet 阻塞解除**：来源 = ebcloud 公共只读卷 /public/huggingface-datasets/Imagenet2012/
+  （官方 ILSVRC2012 原始 tar：img_train.tar 147,897,477,120 B = 1000 个 synset 类 tar、img_val.tar
+  6,744,924,160 B，只读永久保留=审计源；用户无学校账号，官方申请不可行）。实测 train.json 129,833
+  引用仅 **101 个 synset**、test.json 5,050 引用 val 平铺；tools/imagenet_extract.py 流式单遍提取
+  （101 类 129,833 + val 5,050，errors=0，~9 分钟）→ cl_dataset/ImageNet_withlabel/{train,val}/
+- Kaggle 备选（imagenet-object-localization-challenge）凭据+规则已验证未用（用户决策公共卷优先）
+- 四任务全量 preflight 三连 PASS（coindl four_tasks_20260903_114629/ → A100
+  presweep_four_tasks_20260903_123141/ → presweep 复核）：四任务 missing=0/corrupt=0；
+  data_sha256=30a878a24653f942f50af1ed8bd6c7118a6fd407dcb1a7f2a84b215ac69c4602；
+  manifest：logs/full_preflight/manifest_20260903.json（sha256 b67771670f63…）
+- presweep（4×A100 coin4al，阶段 B 全过）：run_tests Ran 73 / smoke_gpu+smoke_ds rc=0 /
+  正式脚本只读审计 / dry-run 0.1+0.01 rc=0（manifest 差异仅 ratio；输出全在 tmp 隔离）；
+  训练计划 0.1=308 steps（280 task+28 replay）、0.01=284（280+4）；0.01 round2/3 replay
+  N=127/473 < 有效 batch 896 → **1 optimizer step**（参数仍真更新，阶段 II 实测门禁）；
+  估算正常档 ~36-40h / ~¥1,140（¥29.96/h）；报告
+  logs/presweep/PRESWEEP_GO_NOGO_20260903.md → **GO（有条件）**
+- 正式实验分阶段放行（用户批准 2026-09-03）：I 同步（本分支 experiment/coin-replay-presweep-20260903）
+  → II single-step replay 门禁（N=127/473 实测 LR>0+参数真变）→ III 启动前检查 → IV 仅启动
+  `bash scripts/CoIN_Replay/run_sweep.sh 0.1`（env：ENFORCE_MIN_STEPS=1 ALLOW_SINGLE_STEP_REPLAY=1
+  PREFLIGHT_ARGS='--layout-map {"ImageNet":"ImageNet_withlabel"}'）→ 0.1 验收后停止，0.01 另行批准
 
 

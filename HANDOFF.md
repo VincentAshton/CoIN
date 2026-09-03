@@ -175,7 +175,11 @@ ENFORCE_MIN_STEPS=1 ALLOW_SINGLE_STEP_REPLAY=1 bash scripts/CoIN_Replay/run_swee
 - 环境：/root/data/coin/conda_envs/coin（torch 2.0.1+cu118 / transformers 4.32.0 / peft 0.4.0 /
   deepspeed 0.14.0 / flash-attn 2.5.6 / protobuf 4.25.3 / python 3.10.21）
 - 封存：/root/data/coin/logs/archive_final_20260902/（sha256_manifest_final.txt + run_tests_v4/canary_v5 日志）
-- 正式 sweep 的**唯一阻塞 = ImageNet 图片未备**（需官方注册凭据下载，~150G）
+- **正式 sweep 数据门禁已全 PASS（2026-09-03）**：ImageNet 就位（公共卷官方 tar 提取 101 类
+  129,833 + val 5,050 → cl_dataset/ImageNet_withlabel/）；四任务全量 preflight 三连 PASS
+  （logs/full_preflight/four_tasks_20260903_114629/、presweep_four_tasks_20260903_123141/）；
+  data_sha256=30a878a24653f942f50af1ed8bd6c7118a6fd407dcb1a7f2a84b215ac69c4602；
+  manifest logs/full_preflight/manifest_20260903.json（sha256 b67771670f63…）
 
 ### 10.3 恢复/续接步骤
 ```bash
@@ -188,17 +192,35 @@ git clone https://github.com/VincentAshton/CoIN.git && cd CoIN   # HEAD=7c45394
 #   bash scripts/CoIN_Replay/run_tests.sh   # 期望 Ran 73 OK（零 GPU，5 分钟环境健全性快检）
 #   bash scripts/CoIN_Replay/canary.sh      # 全绿（C 自清重训/E 断点复用）——环境变动时
 
-# 下一步正式实验的路径：ImageNet 图片（官方注册凭据，~150G）→ 四任务 preflight
-# （ImageNet 需 --layout-map '{"ImageNet":"ImageNet_withlabel","GQA":"."}'）→ sweep
+# 下一步正式实验（2026-09-03 起分阶段放行，见 §11）：四任务 preflight 已 PASS → presweep GO → 阶段
+# I-IV：同步 → single-step 门禁 → 启动前检查 → 仅 ratio=0.1
+# preflight 命令（layout-map 已实证修正——GQA json 带 ./ 但 Path.parts 折叠 → 首段=GQA=默认期望，
+# 不可配 GQA:"."（永不匹配）；仅 ImageNet 需映射）：
 python scripts/CoIN_Replay/preflight_data.py --data-dir playground/Instructions_Original \
     --image-dir cl_dataset --out-report results/CoIN_Replay/preflight_report.json \
     --tasks ScienceQA TextVQA ImageNet GQA \
-    --layout-map '{"ImageNet":"ImageNet_withlabel","GQA":"."}'
-# 四任务 preflight 全 PASS 后，正式 sweep（两组）
-bash scripts/CoIN_Replay/run_sweep.sh 0.1 0.01
+    --layout-map '{"ImageNet":"ImageNet_withlabel"}'
+# 正式运行（分阶段，IV 只启动 0.1，0.01 另行批准）：
+export ENFORCE_MIN_STEPS=1 ALLOW_SINGLE_STEP_REPLAY=1 \
+  PREFLIGHT_ARGS='--layout-map {"ImageNet":"ImageNet_withlabel"}'
+bash scripts/CoIN_Replay/run_sweep.sh 0.1
 ```
 - canary C 数据公式：round1_train_n = ceil(3 × world × batch × accum / ratio)（当前 = 240，
   replay 24 条 = 3 optimizer steps）；断言含 replay global_step≥2、tensor 级 task!=replay
   （coin_lib ckpt-tensor-diff）、round3 previous-task 加载（verify_round3_load.py）
 - 已知观察：replay 训练末步 LR=0.0 是 cosine 终点（canary 3 steps 下第 3 步为 lr 0，无碍；
   正式 14+ steps 同标准调度）；0.01 组 replay 若 N×ratio<1 会由 build_replay_data 拒绝（空 replay 禁止）
+
+## 11. 正式实验分阶段放行（2026-09-03，权威分支 experiment/coin-replay-presweep-20260903）
+
+- 状态：四任务 preflight PASS、presweep GO（logs/presweep/PRESWEEP_GO_NOGO_20260903.md）、
+  正式 sweep **未启动**；用户批准分阶段：I 同步（本分支）→ II single-step replay 门禁
+  （0.01 round2 N=127 / round3 N=473 的 1-step replay 实测 LR>0 + 参数真变）→ III 启动前检查
+  → IV 仅 `bash scripts/CoIN_Replay/run_sweep.sh 0.1` → 验收后停止，0.01 另行批准
+- 0.01 single-step 背景：有效 batch 896（4×14×16），replay N=127/473 < 896 → ceil=1 step；
+  warmup_steps=int(0.03×1)=0 → 唯一 update 步 LR=lr=2e-4（cosine 首步=峰值，update 先于
+  scheduler step）——理论非零，阶段 II 以 tensor 差异为最终实证
+- 运行 env：ENFORCE_MIN_STEPS=1、ALLOW_SINGLE_STEP_REPLAY=1（0.01 的 1-step replay 显式放行，
+  进 manifest 可审计）、PREFLIGHT_ARGS='--layout-map {"ImageNet":"ImageNet_withlabel"}'
+- 权威代码版本 = 本分支 HEAD（实验记录见 EXPERIMENT_LOG 4.14）；云端 detached HEAD 需与
+  本地/GitHub 三端 hash 一致后再动实验

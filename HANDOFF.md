@@ -245,8 +245,8 @@ bash scripts/CoIN_Replay/run_sweep.sh 0.1
 - **用户否决候选 A**（0.01→1 / 0.1→8 的 ratio 专属 accum = 实验混杂）；批准 **方案 D**：
   task accum=16 冻结不变；replay accum=1 全 ratio/round 统一（REPLAY_ACCUM=1）；
   task 有效 batch 896、replay 有效 batch 56（不再声称 replay 896）。
-- **权威 commit = 8b0a1ac**（experiment/coin-replay-presweep-20260903；本地=GitHub=云端
-  三端一致，2026-09-04 同步）。相对 d7f9d1c 改动：run_replay_exp.sh（train_one 第 7 参 accum 覆盖、plan/实参
+- **权威 commit = dff31d1**（experiment/coin-replay-presweep-20260903；本地=GitHub=云端
+  三端一致，2026-09-04 同步；本行后若含 docs hash 回填 commit 则三端以 HEAD 为准）。相对 d7f9d1c 改动：run_replay_exp.sh（train_one 第 7 参 accum 覆盖、plan/实参
   同源、replay 后强制 ckpt-tensor-diff）、coin_lib.py（per_rank_micro_batches、train_plan
   多口径字段、manifest replay_accum/replay_effective_batch/allow_single_step_replay、
   manifest-cross-check）、run_sweep.sh（静态禁止 ratio 专属 accum）、single_step_gate.sh +

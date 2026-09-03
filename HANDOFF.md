@@ -222,5 +222,20 @@ bash scripts/CoIN_Replay/run_sweep.sh 0.1
   scheduler step）——理论非零，阶段 II 以 tensor 差异为最终实证
 - 运行 env：ENFORCE_MIN_STEPS=1、ALLOW_SINGLE_STEP_REPLAY=1（0.01 的 1-step replay 显式放行，
   进 manifest 可审计）、PREFLIGHT_ARGS='--layout-map {"ImageNet":"ImageNet_withlabel"}'
-- 权威代码版本 = 本分支 HEAD（实验记录见 EXPERIMENT_LOG 4.14）；云端 detached HEAD 需与
+- 权威代码版本 = 本分支 HEAD（实验记录见 EXPERIMENT_LOG 4.14/4.15）；云端 detached HEAD 需与
   本地/GitHub 三端 hash 一致后再动实验
+
+### 11.1 续接状态（2026-09-03 晚，阶段 II No-Go 后停机点）
+
+- **阶段 I 完成**：本分支 HEAD 已含 tools(imagenet)+docs 记录并三端同步（见 EXPERIMENT_LOG 4.15 首条）
+- **阶段 II = No-Go**：0.01 round2/3 replay（N=127/473）在正式配置（accum16/zero3 "auto"）下
+  **0 次真实权重更新**（DS engine 需 896 样本/真步；HF global_step=1 是假象；adapter==task ckpt
+  逐字节相同 sha256 13255ed6…）。0.1 replay 真步 1/5/19（r2 低于 C-1 ≥2）。未启动 0.1/0.01。
+  完整证据：logs/presweep/single_step_replay/ + EXPERIMENT_LOG 4.15 + 复现工具 tools/single_step_gate.*
+- **停机续接点 = 候选方案决策**（推荐 A：run_replay_exp 加 REPLAY_ACCUM env——0.01→1、0.1→8，
+  仅 replay 段覆盖 accum、manifest 留痕；需评审批准改锁定代码）→ run_tests 补用例 →
+  重跑门禁（预期 changed=448）→ 阶段 III 检查 → IV 仅 0.1（run_sweep.sh 0.1 +
+  ENFORCE_MIN_STEPS=1 ALLOW_SINGLE_STEP_REPLAY=1 PREFLIGHT_ARGS='--layout-map
+  {"ImageNet":"ImageNet_withlabel"}'）
+- 实例关机安全：数据/代码/日志全在 coinssd（/root/data）持久卷；gate 临时产物在
+  /root/data/coin/tmp/single_step_gate（保留，评审可能需要）；重租 4×A100 挂 coinssd 即可续接

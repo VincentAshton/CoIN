@@ -382,4 +382,31 @@ canary B–E 云端首跑暴露 3 个问题（本地零 GPU 无法覆盖），�
   `bash scripts/CoIN_Replay/run_sweep.sh 0.1`（env：ENFORCE_MIN_STEPS=1 ALLOW_SINGLE_STEP_REPLAY=1
   PREFLIGHT_ARGS='--layout-map {"ImageNet":"ImageNet_withlabel"}'）→ 0.1 验收后停止，0.01 另行批准
 
+### 4.15 阶段 I 同步 + 阶段 II single-step replay 门禁 No-Go（2026-09-03 晚）
+
+- **阶段 I 同步**：分支 experiment/coin-replay-presweep-20260903 @ 7e841dd（dd1fe4d + tools(imagenet)
+  0892bcb + docs 7e841dd）；run_tests Ran 73 RC=0（云端验证）；本地=GitHub=云端三端 hash 一致；
+  正式运行代码相对 a29b29d 零改动（仅文档 + tools/ 新增）
+- **阶段 II single-step replay 门禁 = No-Go**（正式配置实测：4×A100 / batch14 / accum16 /
+  zero3_offload / bf16 / cosine / warmup 0.03 / LoRA r192，与正式 run_replay_exp 逐位一致）：
+  - 场景 r2（N=127）/ r3（N=473）replay 1 epoch 训练：HF global_step=1、callback 首步 lr=2e-4
+    （非零）、loss 正常记录（0.066/1.13）；但 **adapter 与 task ckpt 逐字节相同**（sha256
+    13255ed6…、changed=0/448、hash d6aed209… 全同）→ **0 次真实权重更新**
+  - **根因**：zero3_offload.json `gradient_accumulation_steps:"auto"`=16 → DeepSpeed engine 每
+    16 个 micro-backward（1 micro = world4×batch14 = 56 样本，即需 896 样本）才应用一次更新；
+    N<896 → engine 从未真 step；HF Trainer 在 dataloader 耗尽时仍把 global_step +1（假性推进）；
+    train_plan 的 ceil(N/896) 为 HF 语义，N<896 时高估（评审 C-1 v3 教训同源，本轮 sha256 实证）
+  - 真步公式 floor(N/896)：0.1 replay r2/r3/r4 = 1/5/19（train_plan 显示 2/6/20，r2 的 1 真步
+    低于评审 C-1 ≥2 steps）；0.01 r2/r3 = 0（fail）、r4 = 1
+  - 按任务书判定 No-Go：**未启动 0.1/0.01**、未绕过断言、未改正式代码
+  - 证据：logs/presweep/single_step_replay/（gate_master_v2.log、single_step_summary.json、
+    train_{task_sqa,replay_r2,replay_r3}.log、SINGLE_STEP_GATE_REPORT.md sha256 d4bc802f…）；
+    复现工具 scripts/CoIN_Replay/tools/single_step_gate.sh + single_step_summary.py
+  - **候选方案（待评审/用户决策）**：A. run_replay_exp 增加 REPLAY_ACCUM env（仅 replay 段覆盖
+    accum，manifest 留痕）：0.01→1（r2=3/r3=9/r4=32 真步）、0.1→8（r2=2/r3=10/r4=39）——
+    **推荐**；B. 维持 accum16 + 豁免 0.1 r2 的 1 真步（0.01 无法豁免）——不推荐；
+    C. 调整 0.01 扫描点使 replay N≥896——需用户同意改变实验设计
+  - 决策后续接：批准 A → 改 run_replay_exp.sh（评审）→ run_tests 补 plan 真步用例 →
+    重跑门禁（预期 changed=448、hash 不同、真步≥2）→ 阶段 III/IV（仅 0.1）
+
 

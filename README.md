@@ -1,131 +1,41 @@
-# CoIN: A Benchmark of ContinuaL Instruction tuNing for Multimodel Large Language Model
+# CoIN + Replay — 实验结果分支
 
-Cheng Chen, Junchen Zhu, Xu Luo, Hengtao Shen, LianLi Gao, Jingkuan Song.
+本分支只保存**实验结果的对外呈现**（去敏、无 checkpoint/模型/数据/原始预测/日志）。
+运行代码在 `experiment/coin-replay-presweep-20260903` 分支（锁定，代码与 0.1 运行时一致）。
 
-<img src="./assets/architecture.png">
+## ratio=0.1 结果（COMPLETE，2026-09-04）
 
-## Abstract
-Instruction tuning demonstrates impressive performance in adapting Multimodal Large Language Models (MLLMs) to follow task instructions and improve generalization ability. By extending tuning across diverse tasks, MLLMs can further enhance their understanding of world knowledge and instruction intent. However, continual instruction tuning has been largely overlooked and there are no public benchmarks available. In this paper, we present CoIN, a comprehensive benchmark tailored for assessing the behavior of existing MLLMs under continual instruction tunning. CoIN comprises 10 meticulously crafted datasets spanning 8 tasks, ensuring diversity and serving as a robust evaluation framework to assess crucial aspects of continual instruction tuning, such as task order, instruction diversity and volume. Additionally, apart from traditional evaluation, we design another LLM-based metric to assess the knowledge preserved within MLLMs for reasoning. Following an in-depth evaluation of several MLLMs, we demonstrate that they still suffer catastrophic forgetting, and the failure in instruction alignment assumes the main responsibility, instead of reasoning knowledge forgetting. To this end, we introduce MoELoRA which is effective in retaining the previous instruction alignment.
+ScienceQA → TextVQA → ImageNet → GQA 顺序 LoRA 微调 + 0.1 比例 TRACE 式回放（4×A100，
+task effective batch 896 / replay 56，replay 真步 23/85/317，runtime commit 17cfa66）
 
-## Install
-1. Clone this repository and navigate to CoIN folder
-``` 
-git clone https://github.com/zackschen/CoIN.git
-cd CoIN 
+| | ScienceQA | TextVQA | ImageNet | GQA |
+|---|---|---|---|---|
+| round1 | **73.26** | — | — | — |
+| round2 | 72.86 | **39.03** | — | — |
+| round3 | 73.52 | 57.56 | **4.02** | — |
+| round4 | 74.13 | 55.91 | 55.19 | **37.90** |
+
+- **MAA = 57.51**（平均每轮已学任务精度）
+- **BWT = 17.23**（平均末轮 vs 初学差值）
+- round3 ImageNet 4.02 已诊断 = 方法行为（replay 不含当前任务所致，初学 96.93%）——
+  见下方 diagnostic
+
+## 文件
+
 ```
-2. Install Package
-```
-conda create -n coin python=3.10 -y
-conda activate coin
-pip install --upgrade pip
-pip install -e .
-```
-
-3. Install additional packages for training cases
-```
-pip install -e ".[train]"
-pip install flash-attn --no-build-isolation
-```
-
-This repo is based on [LLaVA](https://github.com/haotian-liu/LLaVA). 
-If you meet a problem, maybe you could find some solutions in issuses.
-
-## Dataset
-Please download the images from the constituting dataset: ScienceQA, VQAv2, VizWiz, TextVQA, GQA, OCR-VQA, ImageNet, RefCOCO, RefCOCO+, and RefCOCOg.
-|  Image Source   | Download Path  |
-|  :----:  | :----:  |
-| COCO | [train2014](http://images.cocodataset.org/zips/train2014.zip), [test2015](http://images.cocodataset.org/zips/test2015.zip), [val2014](http://images.cocodataset.org/zips/val2014.zip) |
-| RefCOCO  | [annotation](https://bvisionweb1.cs.unc.edu/licheng/referit/data/refcoco.zip) | 
-| RefCOCO+  | [annotation](https://bvisionweb1.cs.unc.edu/licheng/referit/data/refcoco+.zip) | 
-| RefCOCOg  | [annotation](https://bvisionweb1.cs.unc.edu/licheng/referit/data/refcocog.zip) | 
-| ImageNet  | [images](https://image-net.org/challenges/LSVRC/index.php) | 
-| OCR-VQA  | [images](https://drive.google.com/drive/folders/1_GYPY5UkUy7HIcR0zq3ZCFgeZN7BAfm_) | 
-| GQA  | [images](https://downloads.cs.stanford.edu/nlp/data/gqa/images.zip) | 
-| TextVQA  | [train](https://dl.fbaipublicfiles.com/textvqa/images/train_val_images.zip),[test](https://dl.fbaipublicfiles.com/textvqa/images/test_images.zip) | 
-| ScienceQA  | [images](https://drive.google.com/drive/folders/1w8imCXWYn2LxajmGeGH_g5DaL2rabHev) | 
-| VizWiz  | [train](https://vizwiz.cs.colorado.edu/VizWiz_final/images/train.zip), [val](https://vizwiz.cs.colorado.edu/VizWiz_final/images/val.zip), [test](https://vizwiz.cs.colorado.edu/VizWiz_final/images/test.zip) | 
-
-After downloading all of them, organize the data as follows:
-```
-├── COCO2014
-│   └── train2014
-├── GQA
-│   └── images
-├── OCR-VQA
-│   └── images
-├── TextVQA
-│   └── train_images
-│   └── test_images
+docs/experiments/coin_replay/ratio_0.1/
+  README.md                      实验说明 + 配置 + 状态
+  coin_metrics.json              权威指标（A 矩阵/MAA/BWT）
+  acc_sources.json               10 个评估单元聚合 accuracy（重算输入）
+  recompute_metrics.py           独立重算脚本（交叉验证通过）
+  recomputed_metrics.json        重算输出
+  run_manifest.sanitized.json    去敏配置快照（路径相对化、无凭据）
+  validation_report.md           完整性验收（全项 PASS）
+  imagenet_round3_diagnostic.md  ImageNet 4.02 只读诊断
+  results_sha256.txt             结果文件 SHA256 清单
 ```
 
-Then, please download the instructions from our datasets path: [CoIN_Dataset](https://huggingface.co/datasets/Zacks-Chen/CoIN/tree/main)
-then, organize the instructions as follows:
-```
-├── Instruction_Original
-│   └── GQA
-│       └── train.json
-│       └── test.json
-│   └── ScienceQA
-│       └── train.json
-│       └── test.json
-├── Instruction_Type2
-│   └── GQA
-│       └── train.json
-│       └── test.json
-```
+## 状态
 
-## Instruction Tuning
-First, downloading the pretrained projectors in [LLaVA Model_Zoo](https://github.com/haotian-liu/LLaVA/blob/main/docs/MODEL_ZOO.md).
-
-Setting `pretrain_mm_mlp_adapter` to the projector path.
-You could modify the `deepspeed config` to change the deepspeed config.
-
-We provide the scripts of our train order in `scripts/*/Train`.
-Note, the `output_dir` of the previous script is the `previous_task_model_path` of the next training process.
-Then, you could tune these datasets in your order.
-
-We provide scripts for training MOELoRA with LLaVA in `scripts/LLaVA/Train_MOE`. Additionally, you can modify the code to train MiniGPT-V2 and Qwen-VL, following the example in lines 138-152 of `ETrain/Models/LLaVA/utils.py`.
-
-## Evaluation
-We have prepared the scripts to evaluate the trained model in `scripts/*/Eval`.
-
-These scripts will evalute the trained model and create the prompts (`prompt_to_eval.json`) for evaluating the general knowldege.
-
-To evaluate the general knowldege, you could add the result path to `scripts/Eval_GeneralKnowledge/eval_prompt_slim.sh` and run it, this script file will output a score to indicate the general knowledge.
-
-## To Do
-1. - [x] Evaluating on more MLLM, MiniGPT-4, ~~MiniGPT-V2~~, InstrctBlip, ~~Qwen-VL~~; MiniGPT-V2, Qwen-VL have been merged. In addition, since MiniGPT-4 and InstrctBlip are based on LAVIS resp, you can modify the config to train with these model.
-2. - [] Evaluating on different size of MLLM; We are conducting experiments with larger model, 13b llava.
-3. - [] Evaluating on full finetune.
-
-## Replay 实验（本 fork 新增）
-
-本 fork 在 CoIN 基准上复现 TRACE 式 Replay 实验：顺序微调每个任务后，对前序任务数据按比例抽样回放训练。
-详见 `scripts/CoIN_Replay/`、`RUNBOOK.md`、`HANDOFF.md`、`EXPERIMENT_LOG.md`。
-
-```bash
-# 单比例（4 任务，Truth Alignment，MAA/BWT）
-bash scripts/CoIN_Replay/run_replay_exp.sh 0.1
-bash scripts/CoIN_Replay/run_replay_exp.sh 0.01
-# 顺序扫多个比例
-bash scripts/CoIN_Replay/run_sweep.sh 0.1 0.01
-```
-
-## Citation
-```
-@misc{chen2024coin,
-    title={CoIN: A Benchmark of Continual Instruction tuNing for Multimodel Large Language Model}, 
-    author={Cheng Chen and Junchen Zhu and Xu Luo and Hengtao Shen and Lianli Gao and Jingkuan Song},
-    year={2024},
-    eprint={2403.08350},
-    archivePrefix={arXiv},
-    primaryClass={cs.CV}
-}
-```
-
-## Acknowledgement
-[LLaVA](https://github.com/haotian-liu/LLaVA): the codebase we built upon, and our base model LLaVA-1.5-7b that has the amazing vision-language capabilities!
-
-[LAVIS](https://github.com/salesforce/LAVIS): the codebase MiniGPT and InstructBlip are built upon.
-
-[MiniGPT](https://github.com/Vision-CAIR/MiniGPT-4.git): the codebase of MinigGPT and MinitGPT-v2.
+- ratio=0.01：未运行（待批准；将使用与 0.1 相同的运行代码 commit）
+- 其他比例/实验：按需在此仓库追加独立结果分支

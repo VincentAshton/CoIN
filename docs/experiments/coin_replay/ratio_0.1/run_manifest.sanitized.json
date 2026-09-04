@@ -1,0 +1,60 @@
+{
+  "run_id": "coin_replay_r0.1_20260904_033727",
+  "config": {
+    "ratio": 0.1,
+    "tasks": [
+      "ScienceQA",
+      "TextVQA",
+      "ImageNet",
+      "GQA"
+    ],
+    "model_base": "checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5",
+    "vision_tower": "checkpoints/LLaVA/clip-vit-large-patch14-336",
+    "projector": "checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5-projector/mm_projector.bin",
+    "lora_r": 192,
+    "lora_alpha": 256,
+    "lora_dropout": 0.05,
+    "lr": 0.0002,
+    "mm_projector_lr": 2e-05,
+    "epochs_per_task": 1.0,
+    "replay_epochs": 1.0,
+    "seed": 1234,
+    "data_seed": 1234,
+    "sample_mode": "prefix",
+    "per_device_batch": 14,
+    "grad_accum": 16,
+    "replay_accum": 1,
+    "world_size": 4,
+    "effective_batch": 896,
+    "replay_effective_batch": 56,
+    "allow_single_step_replay": 0,
+    "lr_scheduler_type": "cosine",
+    "warmup_ratio": 0.03,
+    "precision": "bf16+tf32",
+    "grad_ckpt": true,
+    "ds_config": "scripts/zero3_offload.json",
+    "gpus": "0,1,2,3",
+    "model_max_length": 2048,
+    "temperature_eval": 0.0,
+    "T": 4
+  },
+  "config_hash": "a424a40f9498bf71a289958b6482bfda29d22ba35b0258a4cf067a0b89c39364",
+  "git": {
+    "commit": "17cfa66f009bd1fd1f5d360307f97d4249bf2c5c",
+    "dirty_diff_hash": "clean"
+  },
+  "env": {
+    "torch": "2.0.1+cu118",
+    "transformers": "4.32.0",
+    "peft": "0.4.0",
+    "deepspeed": "0.14.0",
+    "flash_attn": "2.5.6",
+    "vllm": "unavailable",
+    "cuda": "11.8"
+  },
+  "data_revision": "bf6bd4ee1883c6eb9b94a2bd0544d0b12e90f5d72d8a4d604791a3842516196d",
+  "model_config_hash": "5fe5a4b3d741e11a1237597d68f3803b759d79d9bafbf840ef14afab480f2b29",
+  "ds_config_hash": "4e0c4eb10e915e63b543e504496b5869c575f41fe841c6818260b3709eb16458",
+  "created_at": "2026-09-04 03:37:27",
+  "sanitized_note": "2026-09-04 去敏：config 路径已相对仓库；env 版本清理；无账号/IP/端口/SSH/密码/token；原始字段见 run_manifest_raw（云端，不入库）"
+}

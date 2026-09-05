@@ -11,6 +11,7 @@ LLaVA-1.5 顺序 LoRA 微调持续学习基准）的个人 fork，用于运行 *
 |---|---|
 | **实验结果（ratio=0.10 与 0.01 均完成）** | → `results/coin-replay-r010-20260904` 分支<br>[github.com/…/tree/results/coin-replay-r010-20260904](https://github.com/VincentAshton/CoIN/tree/results/coin-replay-r010-20260904)（双 A 矩阵 / MAA / BWT / 对比分析 / 验收） |
 | **实验运行代码与工具** | → `experiment/coin-replay-presweep-20260903` 分支（编排/门禁/测试 + 实验导向 README） |
+| **从零完整复现**（环境/数据/门禁/运行/验收） | → `experiment` 分支的 `REPRODUCE.md`<br>[github.com/…/blob/experiment/…/REPRODUCE.md](https://github.com/VincentAshton/CoIN/blob/experiment/coin-replay-presweep-20260903/REPRODUCE.md) |
 | **内部过程记录**（交接/逐日日志/运行手册） | `experiment` 分支的 `docs/internal/`（HANDOFF.md / EXPERIMENT_LOG.md / RUNBOOK.md） |
 
 ## 实验状态（2026-09-05）

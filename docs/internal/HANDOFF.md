@@ -268,3 +268,26 @@ bash scripts/CoIN_Replay/run_sweep.sh 0.1
 - 时长/费用实测口径：0.1 ≈ 8-8.5h、0.01 ≈ 7.2-7.5h、两 ratio ≈ 15.5-16h ≈ ¥435-560
   （gas16 48-56s/step、gas1 4-8s/step 实测；旧 170s/step 外推作废）。
 - 云端实例 30267 在线（2026-09-04 验证完成）；正式 sweep 启动前应确认无残留进程。
+
+## 11.3 0.01 正式运行完成 + 双 ratio 结果发布（2026-09-05）
+
+- 0.01 运行：03:57:55 → 11:03:31 DONE rc=0（~7.1h）；tmux coin_sweep_r001_20260905；
+  日志 /root/data/coin/logs/formal/ratio_0.01_20260905_035722/；云端 detached HEAD 069b608
+  （=17cfa66 运行代码）。验收全 PASS：verify_complete_r001.sh（=0.1 版 sed 参数化）+
+  prediction 数量/ID 10/10 与 0.1 逐单元一致；独立重算零差异。
+- **结果**：MAA=60.4406、CoIN BWT=-13.6299、final avg=46.1925、终局旧任务均值 47.70、
+  对角均值 59.82；replay 真步 3/9/32（N=127/473/1771）== manifest；tensor diff 448/448
+  （adapter=224 lora_A+224 lora_B；mm_projector 在 non_lora_trainables.bin 另验 4/4 changed）。
+- **对比 0.1**（57.5057/+17.2306/55.7834/61.74/38.55）：0.01 对角/中间轮高（replay 干扰小）
+  但终局旧任务 −14.04、final −9.59、BWT 转负 → 主结论「0.01 不足以满足终局保持目标，
+  稳定性—可塑性权衡；单 seed 描述性证据」（推荐口径写入 results 分支 README）。
+- **发布**：results 分支 results/coin-replay-r010-20260904 @ c7f0e57（目录重组 ratio_0.1→
+  ratio_0.10 + ratio_0.01/ + analysis/ 五件 + 顶层双 ratio recompute/comparison；普通 push）；
+  默认分支 CoIN README 同步 @ 58ff7dd；临时 clone 独立重算 CROSS-VALIDATION PASS。
+- 本轮关键坑（详见技能 references）：0.1 文档 checkpoint 计数 8→7 修正；448 覆盖 = adapter
+  LoRA 全参数（mm_projector 在独立文件需另验）；manifest git 字段 17cfa66 vs 069b608 为同代码
+  不同标签；round replay_plan warmup_steps/first_step_lr 随真步派生属白名单 diff；
+  results_sha256.txt 含非 hash 标题行；问题文件（expected ID 源）= Instructions_Original/
+  {ScienceQA/ImageNet/GQA:test.json, TextVQA:val.json} 整文件 JSON。
+- 云端：无残留进程；069b608 detached clean 未动；实例可关闭（数据在 /root/data 持久卷）。
+- 本 HANDOFF 为 docs-only commit；正式运行代码仍 = 17cfa66（=069b608，逐字节一致）。

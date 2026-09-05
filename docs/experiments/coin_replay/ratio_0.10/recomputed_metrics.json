@@ -1,0 +1,63 @@
+{
+  "ratio": 0.1,
+  "tasks": [
+    "ScienceQA",
+    "TextVQA",
+    "ImageNet",
+    "GQA"
+  ],
+  "A_matrix": [
+    [
+      73.261,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      72.8602,
+      39.03,
+      0.0,
+      0.0
+    ],
+    [
+      73.5204,
+      57.56,
+      4.02,
+      0.0
+    ],
+    [
+      74.1335,
+      55.91,
+      55.19,
+      37.9
+    ]
+  ],
+  "MAA": 57.5057,
+  "BWT_coin": 17.2306,
+  "BWT_Tminus1": 22.9741,
+  "final_avg": 55.7834,
+  "final_old_task_mean": 61.7445,
+  "diagonal_mean": 38.5528,
+  "row_averages": [
+    73.261,
+    55.9451,
+    45.0335,
+    55.7834
+  ],
+  "per_task_final_minus_diagonal": {
+    "ScienceQA": 0.8724,
+    "TextVQA": 16.88,
+    "ImageNet": 51.17,
+    "GQA": 0.0
+  },
+  "cross_validation": {
+    "PASS": true,
+    "max_A_diff": 4.871492507163566e-07,
+    "MAA_diff": 0.0,
+    "BWT_diff": 0.0,
+    "ref": {
+      "MAA": 57.5057,
+      "BWT": 17.2306
+    }
+  }
+}

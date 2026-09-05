@@ -1,0 +1,763 @@
+{
+ "generated": "2026-09-05",
+ "note": "逐路径组件清单；仅元数据（路径/大小/SHA256），checkpoint 权重不入 GitHub",
+ "checkpoints": {
+  "ratio_0.1": {
+   "root_relative_dir": "checkpoints/CoIN_Replay/ratio_0.1",
+   "checkpoints": [
+    {
+     "checkpoint": "round1_task_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001567637,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "299ca1b048370b90495a1ac0d3ac915e359fac2d471de78ff58b745504a7edc1"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "2d1db1ebaebe9bea0af86db9da81743dad6e52e4c29cbc2172a26f26b601f57a"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "79af7599290cef46f890b16c1a66c2f28707639e59eaabc160353474927939bf"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 2295,
+       "sha256": "121f0aacba48894b89a697dcc593ef7e1133df196d3230c4b7ae56664a1c384a"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round2_task_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001570466,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "e2a67ee56e10e39cf0b6dae88d74b78d8f2a5953716b653f804ecde23c52f4fd"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "8418867aa15e85bd0792ba4a52d5b3c57484ff9f473b7520e13ff9607f29b0a8"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "63a2e32f549dc63fbfbf491bc4a0cc8ba900205479a6c21894465070f4c0b56b"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 5124,
+       "sha256": "5f7a1294cd16edb16bc619a86463559ef35eedaa1c40c99096dcdf74bda63b3a"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round2_replay_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001568675,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "bd71350a436a6fe37e4d4ea662c4dec66730aeb4aa01c71f3c80b3d059ba4562"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "d0009e00a932032f99f8924038fd56ad27e4128add7c365bf70f9d36204e16b8"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "dbf24aa8f804934519bbeffcf0afa789d5ab7b67cf84cabf4b21f12ddf6092ee"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 3333,
+       "sha256": "ce4ff0e68353c86977ff4876fd1fc471356cdaa4c958df882e1a90f34457b328"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round3_task_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001583133,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "c5c1289442be98efd215357a0b6953b10e937cf2a847c0a75eddd1a1fc695a88"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "49cff9c559ada5566a9f217fb9e793688467c9c591949abd4ce06ecee03c327c"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "235ca202b82cc29eeafa63a7cfec6f4e0d5964c9fb326dcce52c35bdaac37772"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 17791,
+       "sha256": "f4d2b6c4bf1515c08774dc38507e313fe747c778a4bb2f180bab04a096db07e6"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round3_replay_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001576070,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "5950c1236a262c1b086e2fb4da184dc09947f87c13cec2568866d211a5a79933"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "11a6e0df5d746e02967c51ef4e4de3866d713eddec7398b5f549217e957b1dfa"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "918f5d04c1911258e3e3ad851737b557428c92b63499111dc47ee3811b8901db"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 10728,
+       "sha256": "7cf8a28bffa2e9b6a653593ab9fdbf55bbec0f1f6f9adeda6d9b7659d04df3f8"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round4_task_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001575507,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "7879d39ea398a5f051127b4b5b8cee8b7ef36c9b33fb9f77e4c90f1c55ac9f47"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "f84f5263fbcea5c109c9c57427825d44c86fa17d0b37bca1b3715ffe30da80c9"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "a3ac1d8ba2c9c582d34d5f139f55c2358d0fac4f01dcc6f79ca8a6a252e758d0"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 10165,
+       "sha256": "cd6d6f44dbcb5ee6ecbabfb27121ac878086863f91c8b2b053e69bbe4658ff0d"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round4_replay_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001603870,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "5113846a5f15fb2ea2874b9c923f9df23a5803628ff7a27f975c30d40abb9889"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "92cf7062030ceaabfd0613221684640becb479683175d50ee5e24463ab17c924"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "521e2ba6060a5b0d36fe73c6e1517733360135eeb77799d4f859dc8c82755f01"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 38528,
+       "sha256": "6fea71ef820d7907f9b84d6c2357e9aedce3b589e5746d90485b59e81442c7c9"
+      }
+     ]
+    }
+   ],
+   "note": "7 个 checkpoint = 4 task(round1-4) + 3 replay(round2-4)；adapter_model.bin 为 peft LoRA 权重（448 tensors），non_lora_trainables.bin 为 mm_projector 可训练权重（4 tensors）"
+  },
+  "ratio_0.01": {
+   "root_relative_dir": "checkpoints/CoIN_Replay/ratio_0.01",
+   "checkpoints": [
+    {
+     "checkpoint": "round1_task_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001567634,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "7ef38eeb0368ecc3409611f1a040152b30bb35cc3f338cde1ae313069fc83216"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "cca1e1f402d3e100efe15f83fbb62d5bf0369ee48a5f1cabea8039e6b56040f9"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "6406b647a5751c039254ba9e8df08dbe6f0245553d6ae958645bd0d2633b6e35"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 2292,
+       "sha256": "44b493af129021c5c49610c743752e4c2156d45910147cea006271c6b0f86c29"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round2_task_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001570467,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "a19982091e1373aa8c888afb3719eb787a765f15018425c19f8bd33cc03993af"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "52f54f049546db4bf51268320104f24b5428200f092fa98dd40df99f643e722f"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "34ec65b769afa2d51242b5484c344e2429f4e281882b5e15ed4c82364534f3d5"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 5125,
+       "sha256": "2214a523b186a33761d2aa05c3d2f62f10b68450aef4829d416d42984f7b226b"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round2_replay_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001566290,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "f70117b6728e8deba08e7551833f9a796883bceb10ac201b4d5f714c3e207770"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "79f869a791468e7ebb3be3eb167e7d1f16a8fb6fcf25a23960a839f1d5c95deb"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "fe28b1b8477d1587ca4b315ec296706f0c59ad050864717a354dced6b7c34b02"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 948,
+       "sha256": "3a6655ac3133817395b9b2e28f5c395ee2bd671ad25ad2c0e37e8d940dc3ccc7"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round3_task_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001583137,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "f818d979cf17d35b29782f13e8a936776271a2fcddd4ef116709bf4bbaee7da3"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "075e5a7aaea2a2210067878e8a8aeb1e3fb14c15955564bea2e8adf07a72ea79"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "0ce39ce31c88c98b73356749b0a0825d89212801fca4c50cf42134d0a9d29e95"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 17795,
+       "sha256": "7faa0439fe301c7b631a0212d286bf0ce1208bc3e49c7d57d87cea0337cc28f6"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round3_replay_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001566996,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "a500afb8b2ce82f6f5f117f132c11cfa0e78de6f1d21422ef4bf705819462b24"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "32c7ba75636a71d2fff28dda705f88ba8f4a32cd99c77c68f826558ff3a3e3aa"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "1f8910dd3537a2292d3f4a8077eec3f421011f74b7b2a91e444dc1dcbec61cf5"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 1654,
+       "sha256": "2f96597f5f32397697bfe62cc607c2a40c7bd28592f46cfc3e8c035bee1babdb"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round4_task_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001575514,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "ff57c17db7abf4e36e06fa8972280f02a5e7393dc4630d3a6af6ad4414d87cbf"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "546c349505d0bb594480849ecd97f44572da68c742cb9f352530c4018b08ffd6"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "63566310cca5f63092c1893780e69488c4b6452c9e6b1bc40eca9e33c2e07ff0"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 10172,
+       "sha256": "33e173d395494f47803366474b0f690f9a714e99ff50a6720873081955fa6b08"
+      }
+     ]
+    },
+    {
+     "checkpoint": "round4_replay_llava_lora",
+     "file_count": 6,
+     "total_bytes": 1001569764,
+     "files": [
+      {
+       "name": "README.md",
+       "size": 88,
+       "sha256": "a031fff54629e2384925072b16a3fcdcc7bfd3bc60282eb726708c7b915fb91a"
+      },
+      {
+       "name": "adapter_config.json",
+       "size": 565,
+       "sha256": "812cd63825b60aa4fd0a32ae2e7333cbe375f8c674910c1ffa5d2433b8418f8c"
+      },
+      {
+       "name": "adapter_model.bin",
+       "size": 959602317,
+       "sha256": "3d47d29f5f5f5fc0f4bd333e5e5a8ed3274f6a5a819d02eb24681ab2b3c7b57f"
+      },
+      {
+       "name": "config.json",
+       "size": 1181,
+       "sha256": "1a440edf866ab6b03f901d07ec675e85be8076c3199d3ae8e11d6051a7b96d74"
+      },
+      {
+       "name": "non_lora_trainables.bin",
+       "size": 41961191,
+       "sha256": "c803a01f75ccfdfa8098caec1fab385749c96dcffd02faa1e7774265a66b7fc0"
+      },
+      {
+       "name": "trainer_state.json",
+       "size": 4422,
+       "sha256": "6744e1bb6f4a246aaa41cdc05d63d67c790e991adcf45176b2d8e4d5d2646388"
+      }
+     ]
+    }
+   ],
+   "note": "7 个 checkpoint = 4 task(round1-4) + 3 replay(round2-4)；adapter_model.bin 为 peft LoRA 权重（448 tensors），non_lora_trainables.bin 为 mm_projector 可训练权重（4 tensors）"
+  }
+ },
+ "tensor_diff_coverage": {
+  "adapter_model.bin": {
+   "keys": {
+    "lora_A": 224,
+    "lora_B": 224,
+    "total": 448
+   },
+   "changed_total_per_round": {
+    "r2": 448,
+    "r3": 448,
+    "r4": 448
+   },
+   "per_ratio": {
+    "ratio_0.1": {
+     "2": {
+      "total_keys": 448,
+      "changed_total": 448,
+      "keys_classified": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "changed_by_class": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "missing": 0,
+      "unexpected": 0,
+      "shape_mismatch": 0,
+      "finite": {
+       "task": true,
+       "replay": true
+      },
+      "tensor_hash_differs": true,
+      "pass_coin_lib": true
+     },
+     "3": {
+      "total_keys": 448,
+      "changed_total": 448,
+      "keys_classified": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "changed_by_class": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "missing": 0,
+      "unexpected": 0,
+      "shape_mismatch": 0,
+      "finite": {
+       "task": true,
+       "replay": true
+      },
+      "tensor_hash_differs": true,
+      "pass_coin_lib": true
+     },
+     "4": {
+      "total_keys": 448,
+      "changed_total": 448,
+      "keys_classified": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "changed_by_class": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "missing": 0,
+      "unexpected": 0,
+      "shape_mismatch": 0,
+      "finite": {
+       "task": true,
+       "replay": true
+      },
+      "tensor_hash_differs": true,
+      "pass_coin_lib": true
+     }
+    },
+    "ratio_0.01": {
+     "2": {
+      "total_keys": 448,
+      "changed_total": 448,
+      "keys_classified": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "changed_by_class": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "missing": 0,
+      "unexpected": 0,
+      "shape_mismatch": 0,
+      "finite": {
+       "task": true,
+       "replay": true
+      },
+      "tensor_hash_differs": true,
+      "pass_coin_lib": true
+     },
+     "3": {
+      "total_keys": 448,
+      "changed_total": 448,
+      "keys_classified": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "changed_by_class": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "missing": 0,
+      "unexpected": 0,
+      "shape_mismatch": 0,
+      "finite": {
+       "task": true,
+       "replay": true
+      },
+      "tensor_hash_differs": true,
+      "pass_coin_lib": true
+     },
+     "4": {
+      "total_keys": 448,
+      "changed_total": 448,
+      "keys_classified": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "changed_by_class": {
+       "lora_A": 224,
+       "lora_B": 224
+      },
+      "missing": 0,
+      "unexpected": 0,
+      "shape_mismatch": 0,
+      "finite": {
+       "task": true,
+       "replay": true
+      },
+      "tensor_hash_differs": true,
+      "pass_coin_lib": true
+     }
+    }
+   }
+  },
+  "non_lora_trainables.bin": {
+   "note": "mm_projector 等可训练非 LoRA 权重；task vs replay 独立比较",
+   "per_ratio": {
+    "ratio_0.1": {
+     "2": {
+      "task_keys": 4,
+      "replay_keys": 4,
+      "changed": 4,
+      "missing": 0,
+      "unexpected": 0,
+      "finite_task": true,
+      "finite_replay": true,
+      "hash_task": "4fb2e6eb90e9db8466c27d46dbd342c2dd3c53ecad1bace68c7d9fd6c5da80bc",
+      "hash_replay": "ced811899e0337205c5a88dbd38d2d0a1b861276c42d53af91d73b50431b5540",
+      "hash_differs": true
+     },
+     "3": {
+      "task_keys": 4,
+      "replay_keys": 4,
+      "changed": 4,
+      "missing": 0,
+      "unexpected": 0,
+      "finite_task": true,
+      "finite_replay": true,
+      "hash_task": "d76e5e07a6de745fe9d2bc246b58a6d06910b9a0e0b0a094812f472ce804f142",
+      "hash_replay": "79ce54171e2eda9bfe25056dccfbd5b7d82fcd48555e300946c085c325b3a5d6",
+      "hash_differs": true
+     },
+     "4": {
+      "task_keys": 4,
+      "replay_keys": 4,
+      "changed": 4,
+      "missing": 0,
+      "unexpected": 0,
+      "finite_task": true,
+      "finite_replay": true,
+      "hash_task": "77ae77fdc3e8e9494b89aeea03fca17ef9f9a84e000c34af7f12724c53c543fb",
+      "hash_replay": "f5e843bd9a596dd48078a9443e61eacc53ca63f12c1ce3c54bc2598fac47443f",
+      "hash_differs": true
+     }
+    },
+    "ratio_0.01": {
+     "2": {
+      "task_keys": 4,
+      "replay_keys": 4,
+      "changed": 4,
+      "missing": 0,
+      "unexpected": 0,
+      "finite_task": true,
+      "finite_replay": true,
+      "hash_task": "eef9a9a6df6e58631e96135b359ab1f26b3277c551ddeb28c4cabd6f89042af8",
+      "hash_replay": "3566a4b64335e6a7d89a1690ede6ff9fa93955d78fa796ae6a930b25ebd84e98",
+      "hash_differs": true
+     },
+     "3": {
+      "task_keys": 4,
+      "replay_keys": 4,
+      "changed": 4,
+      "missing": 0,
+      "unexpected": 0,
+      "finite_task": true,
+      "finite_replay": true,
+      "hash_task": "ac596e7523eb199c5969849c227636ca584eda1799ba29b70e43dcc514fb1ca7",
+      "hash_replay": "723a8b39c5dd64cd5a5ce14829315ce51c43d36fe2d8f2cb674e9f4749180eb7",
+      "hash_differs": true
+     },
+     "4": {
+      "task_keys": 4,
+      "replay_keys": 4,
+      "changed": 4,
+      "missing": 0,
+      "unexpected": 0,
+      "finite_task": true,
+      "finite_replay": true,
+      "hash_task": "e239f7b89360b1588c9abb3707a0ff0da1e39d793c24e42674c1c46470143e31",
+      "hash_replay": "515d7013a7dcb0d58aa2fab3103d78295633330b9d3d9ea6fbb3edc0523dcc49",
+      "hash_differs": true
+     }
+    }
+   }
+  }
+ }
+}

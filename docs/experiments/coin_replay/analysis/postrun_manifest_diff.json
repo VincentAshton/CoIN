@@ -1,0 +1,407 @@
+{
+  "tool": "coin_lib.manifest_cross_check + 顶层/round 字段对比",
+  "runtime_commit": "17cfa66",
+  "config_layer": {
+    "pass": true,
+    "exit_code": 0,
+    "diffs": {},
+    "config_keys_only_a": [],
+    "config_keys_only_b": [],
+    "replay_accum_a": 1,
+    "replay_accum_b": 1,
+    "replay_effective_batch_a": 56,
+    "replay_effective_batch_b": 56
+  },
+  "top_level": {
+    "must_be_same": {
+      "data_revision": {
+        "same": true,
+        "a": "bf6bd4ee1883c6eb9b94a2bd0544d0b12e90f5d72d8a4d604791a3842516196d",
+        "b": "bf6bd4ee1883c6eb9b94a2bd0544d0b12e90f5d72d8a4d604791a3842516196d"
+      },
+      "model_config_hash": {
+        "same": true,
+        "a": "5fe5a4b3d741e11a1237597d68f3803b759d79d9bafbf840ef14afab480f2b29",
+        "b": "5fe5a4b3d741e11a1237597d68f3803b759d79d9bafbf840ef14afab480f2b29"
+      },
+      "ds_config_hash": {
+        "same": true,
+        "a": "4e0c4eb10e915e63b543e504496b5869c575f41fe841c6818260b3709eb16458",
+        "b": "4e0c4eb10e915e63b543e504496b5869c575f41fe841c6818260b3709eb16458"
+      }
+    },
+    "git_field": {
+      "note": "manifest 记录各自运行时刻 rev-parse HEAD；069b608 与 17cfa66 的 scripts/ETrain/coin_lib 逐字节一致（git diff 0 行），非配置差异",
+      "a": {
+        "commit": "17cfa66f009bd1fd1f5d360307f97d4249bf2c5c",
+        "dirty_diff_hash": "clean"
+      },
+      "b": {
+        "commit": "069b608c7506991b8ce924a71c964185929e6913",
+        "dirty_diff_hash": "clean"
+      },
+      "dirty_both_clean": true
+    },
+    "allowed_to_differ": {
+      "run_id": {
+        "a": "coin_replay_r0.1_20260904_033727",
+        "b": "coin_replay_r0.01_20260905_041254",
+        "differs": true
+      },
+      "created_at": {
+        "a": "2026-09-04 03:37:27",
+        "b": "2026-09-05 04:12:54",
+        "differs": true
+      },
+      "config_hash": {
+        "a": "a424a40f9498bf71a289958b6482bfda29d22ba35b0258a4cf067a0b89c39364",
+        "b": "7bbf4ad4481957b723352722220d5cdb92d479c57eb938ead6319e54f46dae5d",
+        "differs": true
+      }
+    },
+    "pass": true
+  },
+  "round_manifests": {
+    "pass": true,
+    "rounds": {
+      "2": {
+        "tasks_same": true,
+        "plan_must_same": {
+          "name": {
+            "same": true,
+            "a": "round2_replay",
+            "b": "round2_replay"
+          },
+          "per_rank_microbatch": {
+            "same": true,
+            "a": 14,
+            "b": 14
+          },
+          "world_size": {
+            "same": true,
+            "a": 4,
+            "b": 4
+          },
+          "grad_accum": {
+            "same": true,
+            "a": 1,
+            "b": 1
+          },
+          "total_train_batch_size": {
+            "same": true,
+            "a": 56,
+            "b": 56
+          },
+          "effective_batch": {
+            "same": true,
+            "a": 56,
+            "b": 56
+          },
+          "lr": {
+            "same": true,
+            "a": 0.0002,
+            "b": 0.0002
+          },
+          "max_len": {
+            "same": true,
+            "a": null,
+            "b": null
+          },
+          "flag_replay_single_step": {
+            "same": true,
+            "a": false,
+            "b": false
+          }
+        },
+        "plan_allowed_diff": {
+          "optimizer_steps": {
+            "a": 23.0,
+            "b": 3.0
+          },
+          "per_rank_micro_min": {
+            "a": 23,
+            "b": 3
+          },
+          "hf_planned_steps": {
+            "a": 23.0,
+            "b": 3.0
+          },
+          "consumed_samples": {
+            "a": 1272,
+            "b": 127
+          },
+          "per_rank_micro": {
+            "a": [
+              23,
+              23,
+              23,
+              23
+            ],
+            "b": [
+              3,
+              3,
+              3,
+              3
+            ]
+          },
+          "steps_per_epoch": {
+            "a": 23.0,
+            "b": 3.0
+          },
+          "N": {
+            "a": 1272,
+            "b": 127
+          },
+          "sampler_padding": {
+            "a": 16,
+            "b": 41
+          },
+          "per_rank_micro_max": {
+            "a": 23,
+            "b": 3
+          },
+          "ds_expected_updates": {
+            "a": 23,
+            "b": 3
+          },
+          "replay_k": {
+            "a": 1272,
+            "b": 127
+          }
+        },
+        "pass": true
+      },
+      "3": {
+        "tasks_same": true,
+        "plan_must_same": {
+          "name": {
+            "same": true,
+            "a": "round3_replay",
+            "b": "round3_replay"
+          },
+          "per_rank_microbatch": {
+            "same": true,
+            "a": 14,
+            "b": 14
+          },
+          "world_size": {
+            "same": true,
+            "a": 4,
+            "b": 4
+          },
+          "grad_accum": {
+            "same": true,
+            "a": 1,
+            "b": 1
+          },
+          "total_train_batch_size": {
+            "same": true,
+            "a": 56,
+            "b": 56
+          },
+          "effective_batch": {
+            "same": true,
+            "a": 56,
+            "b": 56
+          },
+          "lr": {
+            "same": true,
+            "a": 0.0002,
+            "b": 0.0002
+          },
+          "max_len": {
+            "same": true,
+            "a": null,
+            "b": null
+          },
+          "flag_replay_single_step": {
+            "same": true,
+            "a": false,
+            "b": false
+          }
+        },
+        "plan_allowed_diff": {
+          "optimizer_steps": {
+            "a": 85.0,
+            "b": 9.0
+          },
+          "per_rank_micro_min": {
+            "a": 85,
+            "b": 9
+          },
+          "hf_planned_steps": {
+            "a": 85.0,
+            "b": 9.0
+          },
+          "consumed_samples": {
+            "a": 4732,
+            "b": 473
+          },
+          "warmup_steps": {
+            "a": 2,
+            "b": 0
+          },
+          "first_step_lr": {
+            "a": 0.0001,
+            "b": 0.0002
+          },
+          "per_rank_micro": {
+            "a": [
+              85,
+              85,
+              85,
+              85
+            ],
+            "b": [
+              9,
+              9,
+              9,
+              9
+            ]
+          },
+          "steps_per_epoch": {
+            "a": 85.0,
+            "b": 9.0
+          },
+          "N": {
+            "a": 4732,
+            "b": 473
+          },
+          "sampler_padding": {
+            "a": 28,
+            "b": 31
+          },
+          "per_rank_micro_max": {
+            "a": 85,
+            "b": 9
+          },
+          "ds_expected_updates": {
+            "a": 85,
+            "b": 9
+          },
+          "replay_k": {
+            "a": 4732,
+            "b": 473
+          }
+        },
+        "pass": true
+      },
+      "4": {
+        "tasks_same": true,
+        "plan_must_same": {
+          "name": {
+            "same": true,
+            "a": "round4_replay",
+            "b": "round4_replay"
+          },
+          "per_rank_microbatch": {
+            "same": true,
+            "a": 14,
+            "b": 14
+          },
+          "world_size": {
+            "same": true,
+            "a": 4,
+            "b": 4
+          },
+          "grad_accum": {
+            "same": true,
+            "a": 1,
+            "b": 1
+          },
+          "total_train_batch_size": {
+            "same": true,
+            "a": 56,
+            "b": 56
+          },
+          "effective_batch": {
+            "same": true,
+            "a": 56,
+            "b": 56
+          },
+          "lr": {
+            "same": true,
+            "a": 0.0002,
+            "b": 0.0002
+          },
+          "max_len": {
+            "same": true,
+            "a": null,
+            "b": null
+          },
+          "flag_replay_single_step": {
+            "same": true,
+            "a": false,
+            "b": false
+          }
+        },
+        "plan_allowed_diff": {
+          "optimizer_steps": {
+            "a": 317.0,
+            "b": 32.0
+          },
+          "per_rank_micro_min": {
+            "a": 317,
+            "b": 32
+          },
+          "hf_planned_steps": {
+            "a": 317.0,
+            "b": 32.0
+          },
+          "consumed_samples": {
+            "a": 17715,
+            "b": 1771
+          },
+          "warmup_steps": {
+            "a": 9,
+            "b": 0
+          },
+          "first_step_lr": {
+            "a": 2.22222e-05,
+            "b": 0.0002
+          },
+          "per_rank_micro": {
+            "a": [
+              317,
+              317,
+              317,
+              317
+            ],
+            "b": [
+              32,
+              32,
+              32,
+              32
+            ]
+          },
+          "steps_per_epoch": {
+            "a": 317.0,
+            "b": 32.0
+          },
+          "N": {
+            "a": 17715,
+            "b": 1771
+          },
+          "sampler_padding": {
+            "a": 37,
+            "b": 21
+          },
+          "per_rank_micro_max": {
+            "a": 317,
+            "b": 32
+          },
+          "ds_expected_updates": {
+            "a": 317,
+            "b": 32
+          },
+          "replay_k": {
+            "a": 17715,
+            "b": 1771
+          }
+        },
+        "pass": true
+      }
+    }
+  },
+  "pass": true
+}

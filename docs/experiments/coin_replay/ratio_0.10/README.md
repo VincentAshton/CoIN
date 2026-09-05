@@ -4,8 +4,8 @@
 顺序 LoRA 微调 + TRACE 式 Replay 扫描实验 —— ratio=0.1 一轮完整运行结果。
 
 ## 研究目标
-扫描回放比例对持续学习 Truth Alignment（MAA/BWT）的影响；本目录为 ratio=0.1
-基线结果。ratio=0.01 尚未运行（另行批准）。
+扫描回放比例对持续学习 Truth Alignment（MAA/BWT）的影响；本目录为 ratio=0.10
+基线结果。ratio=0.01 结果见上级目录 ratio_0.01/（COMPLETE 2026-09-05）。
 
 ## 任务顺序
 ScienceQA → TextVQA → ImageNet → GQA（每轮：新任务全量微调 → 前序任务按
@@ -44,17 +44,20 @@ ratio=0.1 prefix 抽样回放（round≥2）→ 评估已学全部任务）
 - 运行时长：~7.6h 墙钟（2026-09-04 03:30 → 11:04 CST）
 
 ## 完整性验收（validation_report.md 全项 PASS）
-- exit_code=0；.complete + round1-4 markers；8 checkpoint 可加载且参数 finite
+- exit_code=0；.complete + round1-4 markers；7 个 checkpoint（4 task：round1-4 +
+  3 replay：round2-4）可加载且参数 finite
 - task/replay tensor diff 448/448 changed（round2-4）
-- 10 个 eval 单元齐全；prediction 数量/ID 与问题集逐一吻合
+- 10 个 eval 单元（三角矩阵交集）齐全；prediction 数量/ID 与问题集逐一吻合
   （ScienceQA 4241 / TextVQA 5000 / ImageNet 5050 / GQA 12578）
 - 结果 SHA256 清单：results_sha256.txt
 
 ## ImageNet round3 诊断
 round3 的 ImageNet 自评 4.02 显著低于 round4 的 55.19——只读诊断见
-imagenet_round3_diagnostic.md（结论：replay 内容与方法行为所致，非评估工程故障）。
+../analysis/imagenet_round3_diagnostic.md（结论：与 replay 内容与方法行为一致，
+并排除评估工程故障）。
 
 ## 状态
-- ratio=0.1：COMPLETE（验收通过）
-- ratio=0.01：**未运行**（需另行批准）
+- ratio=0.10：COMPLETE（验收通过，2026-09-04）
+- ratio=0.01：COMPLETE（2026-09-05，见 ../README.md 与 ratio_0.01/）
 - 运行代码锁定 commit 17cfa66（结果分支与 runtime 分离，runtime HEAD 未前进）
+- 双 ratio 对比分析见 ../analysis/comparison_r001_vs_r010.md

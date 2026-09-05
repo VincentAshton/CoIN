@@ -9,15 +9,18 @@ LLaVA-1.5 顺序 LoRA 微调持续学习基准）的个人 fork，用于运行 *
 
 | 想看什么 | 去哪 |
 |---|---|
-| **实验结果（ratio=0.1 已完成）** | → `results/coin-replay-r010-20260904` 分支<br>[github.com/…/tree/results/coin-replay-r010-20260904](https://github.com/VincentAshton/CoIN/tree/results/coin-replay-r010-20260904)（A 矩阵 / MAA=57.51 / BWT=17.23 / 验收 / 诊断） |
+| **实验结果（ratio=0.10 与 0.01 均完成）** | → `results/coin-replay-r010-20260904` 分支<br>[github.com/…/tree/results/coin-replay-r010-20260904](https://github.com/VincentAshton/CoIN/tree/results/coin-replay-r010-20260904)（双 A 矩阵 / MAA / BWT / 对比分析 / 验收） |
 | **实验运行代码与工具** | → `experiment/coin-replay-presweep-20260903` 分支（编排/门禁/测试 + 实验导向 README） |
 | **内部过程记录**（交接/逐日日志/运行手册） | `experiment` 分支的 `docs/internal/`（HANDOFF.md / EXPERIMENT_LOG.md / RUNBOOK.md） |
 
-## 实验状态（2026-09-04）
+## 实验状态（2026-09-05）
 
-- ratio=0.1：**COMPLETE**（MAA=57.51，BWT=17.23，验收全项通过）
-- ratio=0.01：未运行（待批准；将与 0.1 使用同一运行代码 commit）
-- 运行代码锁定于 commit `17cfa66`（仅文档后续整理，代码未变）
+- ratio=0.10：**COMPLETE**（MAA=57.5057，CoIN BWT=+17.2306，final avg=55.7834）
+- ratio=0.01：**COMPLETE**（MAA=60.4406，CoIN BWT=−13.6299，final avg=46.1925）
+- 对比结论（单 seed 描述性证据）：0.01 提高部分中间轮次/新任务表现，但终局旧任务均值
+  低 14.04 个百分点、最终平均低 9.59 个百分点——不足以满足终局保持目标，体现
+  稳定性—可塑性权衡。详见 results 分支 `docs/experiments/coin_replay/README.md`。
+- 运行代码锁定于 commit `17cfa66`（结果分支与 runtime 分离，代码未变）
 
 ## 复现要点
 

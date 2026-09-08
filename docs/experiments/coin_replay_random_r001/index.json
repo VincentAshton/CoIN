@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "series": "CoIN+Replay random replay 抽样系列 r001：SAMPLE_MODE=random RATIO=0.01 REPLAY_ACCUM=1 SEED=1234 DATA_SEED=1234，只变 REPLAY_SAMPLE_SEED",
+  "baselines": {
+    "prefix_0.10": {
+      "label": "prefix ratio=0.10 (2026-09-04)",
+      "MAA": 57.5057,
+      "BWT": 17.2306,
+      "final_avg": 55.7834,
+      "source": "results/coin-replay-r010-20260904 分支 docs/experiments/coin_replay/ratio_0.10/coin_metrics.json"
+    },
+    "prefix_0.01": {
+      "label": "prefix ratio=0.01 (2026-09-05)",
+      "MAA": 60.4406,
+      "BWT": -13.6299,
+      "final_avg": 46.1925,
+      "source": "results/coin-replay-r010-20260904 分支 docs/experiments/coin_replay/ratio_0.01/coin_metrics.json"
+    }
+  },
+  "runs": []
+}

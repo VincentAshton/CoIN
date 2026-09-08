@@ -14,6 +14,7 @@
 # 环境变量（全部显式 export 后进入 manifest，不依赖未 export 的默认值）:
 #   GPUS=0,1,2,3  BATCH=14  ACCUM=16  LR=2e-4  LORA_R=192  LORA_ALPHA=256
 #   EPOCHS=1  REPLAY_EPOCHS=1  SEED=1234  DATA_SEED=1234  SAMPLE_MODE=prefix
+#   REPLAY_SAMPLE_SEED=1234  (random 模式：与 task name 派生 task seed)
 #   DS_CONFIG=scripts/zero3_offload.json  ENFORCE_MIN_STEPS=0  DRY_RUN=0
 #   TASKS_JSON='["ScienceQA","TextVQA","ImageNet","GQA"]'  PREFLIGHT_ARGS=""
 # ============================================================================
@@ -43,6 +44,9 @@ export REPLAY_EPOCHS="${REPLAY_EPOCHS:-1}"
 export SEED="${SEED:-1234}"
 export DATA_SEED="${DATA_SEED:-1234}"
 export SAMPLE_MODE="${SAMPLE_MODE:-prefix}"
+# 随机 replay 抽样（2026-09-08 random-replay 系列）：SAMPLE_MODE=random 时构建器用它
+# 派生 task seed（sha256("<seed>:<task>")）；prefix 模式不参与选择但同样进 manifest/config hash
+export REPLAY_SAMPLE_SEED="${REPLAY_SAMPLE_SEED:-1234}"
 export LR_SCHEDULER_TYPE="${LR_SCHEDULER_TYPE:-cosine}"
 export WARMUP_RATIO="${WARMUP_RATIO:-0.03}"
 export MODEL_MAX_LENGTH="${MODEL_MAX_LENGTH:-2048}"
@@ -325,15 +329,17 @@ run_round() {
   # 2) replay（j>=2；写独立目录，禁止与 task 同目录）
   if (( j > 1 )); then
     local nested_args=()
-    # 0.01 嵌套验证：若 0.10 的 replay 数据已存在，断言 0.01 ⊆ 0.10
+    # prefix 模式 0.01 嵌套验证：若 0.10 的 replay 数据已存在，断言 0.01 ⊆ 0.10
+    # （random 系列 per-run 独立 replay 目录，不做跨目录嵌套；由单测保证排列性质）
     if [[ "$SAMPLE_MODE" == "prefix" && "$RATIO" == "0.01" ]]; then
       local outer_json="$REPLAY_DATA_DIR/../ratio_0.1/round${j}_train.json"
       [[ -f "$outer_json.manifest.json" ]] && nested_args=(--nested-with "$outer_json.manifest.json")
     fi
-    log "round$j 构建 replay 数据 (ratio=$RATIO prefix)"
+    log "round$j 构建 replay 数据 (ratio=$RATIO sample_mode=$SAMPLE_MODE sample_seed=$REPLAY_SAMPLE_SEED)"
     python3 "$ROOT/scripts/CoIN_Replay/build_replay_data.py" \
       --tasks "${TASKS[@]}" --data-dir "$DATA_DIR" --image-dir "$IMG_DIR" \
-      --round "$j" --ratio "$RATIO" --seed "$SEED" \
+      --round "$j" --ratio "$RATIO" \
+      --sample-mode "$SAMPLE_MODE" --seed "$REPLAY_SAMPLE_SEED" \
       --out "$replay_json" "${nested_args[@]}"
     local k
     k=$(python3 -c "import json; m=json.load(open('$replay_json.manifest.json')); print(m['output']['N'])")

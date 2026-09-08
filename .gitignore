@@ -4,6 +4,11 @@
 /playground/
 /results/
 
+# random replay 实验系列本地运行产物（per-run 独立目录；与 prefix 系列 CoIN_Replay 分开）
+/checkpoints/CoIN_Replay_random/
+/playground/Replay_random/
+/results/CoIN_Replay_random/
+
 # 运行时产物
 __pycache__/
 *.pyc

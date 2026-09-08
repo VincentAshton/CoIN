@@ -457,6 +457,7 @@ CONFIG_FIELDS = [
     "ratio", "tasks", "T", "model_base", "vision_tower", "projector",
     "lora_r", "lora_alpha", "lora_dropout", "lr", "mm_projector_lr",
     "epochs_per_task", "replay_epochs", "seed", "data_seed", "sample_mode",
+    "replay_sample_seed",
     "per_device_batch", "grad_accum", "replay_accum", "world_size", "effective_batch",
     "replay_effective_batch", "allow_single_step_replay",
     "lr_scheduler_type", "warmup_ratio", "precision", "grad_ckpt",
@@ -494,6 +495,7 @@ def compute_config(env: dict) -> dict:
         "seed": int(get("SEED", "1234")),
         "data_seed": int(get("DATA_SEED", "1234")),
         "sample_mode": get("SAMPLE_MODE", "prefix"),
+        "replay_sample_seed": int(get("REPLAY_SAMPLE_SEED", "1234")),
         "per_device_batch": batch,
         "grad_accum": accum,
         "replay_accum": replay_accum,
@@ -544,9 +546,16 @@ def manifest_write(res_root: str, cfg: dict, root: str, force: bool = False,
             # 恢复运行：校验 config hash，除运行态字段外不一致即失败
             existing = json_load(path)
             if existing.get("config_hash") != config_hash(cfg):
-                raise ValueError(
-                    "run_manifest.json 已存在且 config hash 不一致——恢复运行配置与首次运行不同，"
-                    "禁止覆盖。首次配置见 manifest 的 config 字段。")
+                old_cfg = existing.get("config", {})
+                diffs = {k: {"existing": old_cfg.get(k), "new": cfg.get(k)}
+                         for k in ("sample_mode", "replay_sample_seed", "ratio")
+                         if old_cfg.get(k) != cfg.get(k)}
+                msg = ("run_manifest.json 已存在且 config hash 不一致——恢复运行配置与首次运行"
+                       "不同，禁止覆盖（sample mode 或 replay sample seed 不一致时禁止恢复到"
+                       "同一结果目录）。首次配置见 manifest 的 config 字段。")
+                if diffs:
+                    msg += " 语义差异字段: " + json.dumps(diffs, ensure_ascii=False)
+                raise ValueError(msg)
             return path
         if not force:
             raise FileExistsError(

@@ -2,6 +2,8 @@
 
 覆盖：目录契约（results/<Task>/round<j>/）、checkpoint 链（task/replay 分离）、
 manifest 不覆盖 + 恢复配置校验、validate_round 跳过、聚合 + .complete。
+random-replay 系列（2026-09-08）追加：SAMPLE_MODE/REPLAY_SAMPLE_SEED 确实传入
+构建器（sidecar manifest 断言）+ replay sample seed 不一致时禁止恢复。
 """
 import json
 import os
@@ -138,6 +140,42 @@ class TestOrchestratorDryRun(unittest.TestCase):
         self.assertFalse(os.path.isfile(os.path.join(self.res, ".complete")))
         # 旧结果不能被误用：round2 的 TextVQA 无产物
         self.assertFalse(os.path.isdir(os.path.join(self.res, "TextVQA", "round2")))
+
+    # ---- random-replay 系列（2026-09-08）：编排层 plumbing --------------------
+
+    def test_random_mode_plumbing_dryrun(self):
+        """SAMPLE_MODE=random + REPLAY_SAMPLE_SEED 必须真正到达构建器。"""
+        import hashlib
+        r = self._run("0.1", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="424242")
+        self.assertEqual(r.returncode, 0, f"STDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}")
+        # run manifest：config 记录 mode 与 sample seed（config hash 一部分）
+        man = json.load(open(os.path.join(self.res, "run_manifest.json")))
+        self.assertEqual(man["config"]["sample_mode"], "random")
+        self.assertEqual(man["config"]["replay_sample_seed"], 424242)
+        # replay sidecar manifest：构建器确实以 random+seed 运行（验收点 9 铁证）
+        m = json.load(open(os.path.join(
+            self.tmp, "replay", "round2_train.json.manifest.json")))
+        self.assertEqual(m["mode"], "random")
+        self.assertEqual(m["sample_seed"], 424242)
+        self.assertEqual(m["sampling_algorithm"],
+                         "sha256_task_seed_python_shuffle_v1")
+        e = m["sources"]["ScienceQA"]
+        self.assertEqual(e["task_seed"],
+                         hashlib.sha256(b"424242:ScienceQA").hexdigest())
+        # floor(12*0.1)=1：选中 1 条（具体哪条由 seed 决定）
+        self.assertEqual(e["k"], 1)
+        self.assertEqual(len(e["selected_indices"]), 1)
+        data = json.load(open(os.path.join(self.tmp, "replay", "round2_train.json")))
+        self.assertEqual(len(data), 1)
+
+    def test_resume_replay_sample_seed_mismatch_fails(self):
+        r1 = self._run("0.1", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="111")
+        self.assertEqual(r1.returncode, 0, r1.stderr)
+        r2 = self._run("0.1", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="222")
+        self.assertNotEqual(r2.returncode, 0)
+        out = r2.stdout + r2.stderr
+        self.assertIn("config hash", out)
+        self.assertIn("replay_sample_seed", out)  # 语义差异字段显式指出
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@
 #   GPUS=0,1,2,3  BATCH=14  ACCUM=16  LR=2e-4  LORA_R=192  LORA_ALPHA=256
 #   EPOCHS=1  REPLAY_EPOCHS=1  SEED=1234  DATA_SEED=1234  SAMPLE_MODE=prefix
 #   REPLAY_SAMPLE_SEED=1234  (random 模式：与 task name 派生 task seed)
+#   RANDOM_REPLAY_RUN_ID=run_0001_seed_1234  (random 系列必设：run_NNNN_seed_<seed>)
 #   DS_CONFIG=scripts/zero3_offload.json  ENFORCE_MIN_STEPS=0  DRY_RUN=0
 #   TASKS_JSON='["ScienceQA","TextVQA","ImageNet","GQA"]'  PREFLIGHT_ARGS=""
 # ============================================================================
@@ -47,6 +48,9 @@ export SAMPLE_MODE="${SAMPLE_MODE:-prefix}"
 # 随机 replay 抽样（2026-09-08 random-replay 系列）：SAMPLE_MODE=random 时构建器用它
 # 派生 task seed（sha256("<seed>:<task>")）；prefix 模式不参与选择但同样进 manifest/config hash
 export REPLAY_SAMPLE_SEED="${REPLAY_SAMPLE_SEED:-1234}"
+# random-replay 系列 run 身份（2026-09-08 审计加固）：仅 random 系列设置；
+# 为空 = 旧 prefix 语义（不启用 fail-fast 门，旧实验行为不变）
+export RANDOM_REPLAY_RUN_ID="${RANDOM_REPLAY_RUN_ID:-}"
 export LR_SCHEDULER_TYPE="${LR_SCHEDULER_TYPE:-cosine}"
 export WARMUP_RATIO="${WARMUP_RATIO:-0.03}"
 export MODEL_MAX_LENGTH="${MODEL_MAX_LENGTH:-2048}"
@@ -378,6 +382,66 @@ run_round() {
   log "round$j 完成（round${j}_manifest.json + .round${j}_done）"
 }
 
+# ---- random-r001 启动 fail-fast 门（2026-09-08 审计加固） ----------------------
+# 仅当 RANDOM_REPLAY_RUN_ID 显式设置时启用；prefix 旧实验不设 → 行为完全不变。
+# 在任何数据预检/训练之前验证正式启动姿势；全部 PASS 才继续。
+random_r001_gate() {
+  local fail=0 rid seed_part
+  [[ -n "$RANDOM_REPLAY_RUN_ID" ]] || return 0
+  note() { echo "  [gate] $*"; }
+  err()  { echo "FAIL(random-r001 gate): $*"; fail=$((fail + 1)); }
+
+  [[ "$SAMPLE_MODE" == "random" ]] || err "SAMPLE_MODE 必须是 random（收到 $SAMPLE_MODE）"
+  [[ "$RATIO" == "0.01" ]] || err "RATIO 必须是 0.01（收到 $RATIO）"
+  if [[ ! "$REPLAY_SAMPLE_SEED" =~ ^[0-9]+$ ]] || (( REPLAY_SAMPLE_SEED < 1 )) \
+     || (( REPLAY_SAMPLE_SEED > 2147483647 )); then
+    err "REPLAY_SAMPLE_SEED 必须是正的 31-bit 整数（收到 $REPLAY_SAMPLE_SEED）"
+  fi
+  [[ "${REPLAY_ACCUM:-}" == "1" ]] || err "REPLAY_ACCUM 必须显式为 1（收到 ${REPLAY_ACCUM:-<空>}）"
+  rid="$RANDOM_REPLAY_RUN_ID"
+  if [[ "$rid" =~ ^run_[0-9]{4}_seed_([0-9]+)$ ]]; then
+    seed_part="${BASH_REMATCH[1]}"
+    [[ "$seed_part" == "$REPLAY_SAMPLE_SEED" ]] || \
+      err "run ID 内嵌 seed $seed_part != REPLAY_SAMPLE_SEED=$REPLAY_SAMPLE_SEED"
+  else
+    err "RANDOM_REPLAY_RUN_ID 格式非法: $rid（期望 run_NNNN_seed_<seed>）"
+  fi
+  local d
+  for d in "$CKPT_ROOT" "$RES_ROOT"; do
+    case "$d" in
+      */CoIN_Replay_random/r001/"$rid") note "路径 OK: $d" ;;
+      *) err "目录必须属于 CoIN_Replay_random/r001/$rid（收到 $d）" ;;
+    esac
+  done
+  # replay 数据目录布局是 playground/Replay_random/（无 CoIN_ 前缀，任务书八.4）
+  case "$REPLAY_DATA_DIR" in
+    */Replay_random/r001/"$rid") note "路径 OK: $REPLAY_DATA_DIR" ;;
+    *) err "REPLAY_DATA_DIR 必须属于 Replay_random/r001/$rid（收到 $REPLAY_DATA_DIR）" ;;
+  esac
+  [[ "$CKPT_ROOT" != "$RES_ROOT" && "$RES_ROOT" != "$REPLAY_DATA_DIR" \
+     && "$CKPT_ROOT" != "$REPLAY_DATA_DIR" ]] || \
+    err "CKPT_ROOT/RES_ROOT/REPLAY_DATA_DIR 必须互不相同"
+  if [[ ! "$MASTER_PORT" =~ ^[0-9]+$ ]] || (( MASTER_PORT < 1024 || MASTER_PORT > 65535 )); then
+    err "MASTER_PORT 非法: $MASTER_PORT"
+  fi
+  local gpus tokens=0 t
+  IFS=',' read -ra gpus <<< "$GPUS"
+  for t in "${gpus[@]}"; do
+    tokens=$((tokens + 1))  # 勿用 ((tokens++))：首轮求值为 0 → set -e 静默退出
+    [[ "$t" =~ ^[0-9]+$ ]] || err "GPUS 含非数字 token: $t"
+  done
+  (( tokens == WORLD )) || err "GPUS token 数 $tokens != WORLD=$WORLD"
+  local uniq
+  uniq=$(printf '%s\n' "${gpus[@]}" | sort -u | wc -l)
+  (( uniq == tokens )) || err "GPUS 含重复设备: $GPUS"
+
+  if (( fail )); then
+    echo "ERROR: random-r001 启动姿势校验失败（共 $fail 项），禁止进入 preflight/训练" >&2
+    exit 1
+  fi
+  log "random-r001 gate PASS: run_id=$rid"
+}
+
 # ---- 主流程 ----------------------------------------------------------------
 main() {
   # 配置校验必须先于 .complete 短路：已完成目录用不同配置重跑必须失败（防混用）
@@ -394,6 +458,8 @@ main() {
       die "存在 .complete 但缺 run_manifest.json——结果目录状态损坏，拒绝继续"
     fi
   fi
+  # random-r001 启动 fail-fast（preflight 之前；prefix 模式 RANDOM_REPLAY_RUN_ID 为空 → 跳过）
+  random_r001_gate
   preflight
   write_manifest
   mkdir -p "$RES_ROOT/logs"

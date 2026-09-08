@@ -77,6 +77,12 @@ def env_versions():
         except Exception:
             out[pkg] = "unavailable"
     try:
+        import platform
+        out["python"] = platform.python_version()
+    except Exception:
+        out["python"] = "unknown"
+    out["python_full"] = sys.version.strip().replace("\n", " ")
+    try:
         import torch
         out["cuda"] = torch.version.cuda or "unknown"
     except Exception:
@@ -457,7 +463,7 @@ CONFIG_FIELDS = [
     "ratio", "tasks", "T", "model_base", "vision_tower", "projector",
     "lora_r", "lora_alpha", "lora_dropout", "lr", "mm_projector_lr",
     "epochs_per_task", "replay_epochs", "seed", "data_seed", "sample_mode",
-    "replay_sample_seed",
+    "replay_sample_seed", "random_replay_run_id",
     "per_device_batch", "grad_accum", "replay_accum", "world_size", "effective_batch",
     "replay_effective_batch", "allow_single_step_replay",
     "lr_scheduler_type", "warmup_ratio", "precision", "grad_ckpt",
@@ -513,6 +519,18 @@ def compute_config(env: dict) -> dict:
         "temperature_eval": float(get("EVAL_TEMPERATURE", "0")),
     }
     cfg["T"] = len(cfg["tasks"])
+    # random 模式强制 run 身份：RANDOM_REPLAY_RUN_ID（run_NNNN_seed_<seed>）进 config hash，
+    # 恢复运行/跨 run 混用校验自动覆盖（prefix 模式不加此键，保持旧兼容）
+    if cfg["sample_mode"] == "random":
+        rid = get("RANDOM_REPLAY_RUN_ID", required=True)
+        m = re.fullmatch(r"run_\d{4}_seed_(\d+)", rid)
+        if not m:
+            raise ValueError(f"RANDOM_REPLAY_RUN_ID 格式非法: {rid!r}"
+                             "（期望 run_NNNN_seed_<seed>，NNNN=4 位序号）")
+        if int(m.group(1)) != cfg["replay_sample_seed"]:
+            raise ValueError(f"RANDOM_REPLAY_RUN_ID 内嵌 seed ({m.group(1)}) 与 "
+                             f"REPLAY_SAMPLE_SEED ({cfg['replay_sample_seed']}) 不一致")
+        cfg["random_replay_run_id"] = rid
     return cfg
 
 

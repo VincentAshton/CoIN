@@ -141,20 +141,40 @@ class TestOrchestratorDryRun(unittest.TestCase):
         # 旧结果不能被误用：round2 的 TextVQA 无产物
         self.assertFalse(os.path.isdir(os.path.join(self.res, "TextVQA", "round2")))
 
-    # ---- random-replay 系列（2026-09-08）：编排层 plumbing --------------------
+    # ---- random-replay 系列（2026-09-08）：编排层 plumbing + 启动门 ------------
+
+    def _run_dirs(self, run_id):
+        """random-r001 gate 合规的 per-run 目录（pattern: <root>/CoIN_Replay_random/r001/<rid>）。"""
+        base = os.path.join(self.tmp, "run_root", run_id)
+        return (os.path.join(base, "checkpoints", "CoIN_Replay_random", "r001", run_id),
+                os.path.join(base, "results", "CoIN_Replay_random", "r001", run_id),
+                os.path.join(base, "playground", "Replay_random", "r001", run_id))
+
+    def _big_data(self):
+        """random 系列 ratio=0.01 需要 floor(N*0.01)>=1 → N>=100。"""
+        build_synthetic(self.data_dir, self.img_dir, "ScienceQA", 120)
+        build_synthetic(self.data_dir, self.img_dir, "TextVQA", 120)
 
     def test_random_mode_plumbing_dryrun(self):
-        """SAMPLE_MODE=random + REPLAY_SAMPLE_SEED 必须真正到达构建器。"""
+        """SAMPLE_MODE=random + REPLAY_SAMPLE_SEED + RANDOM_REPLAY_RUN_ID 全链路。"""
         import hashlib
-        r = self._run("0.1", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="424242")
+        self._big_data()
+        rid = "run_0000_seed_424242"
+        ckpt, res, replay = self._run_dirs(rid)
+        r = self._run("0.01", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="424242",
+                      RANDOM_REPLAY_RUN_ID=rid,
+                      REPLAY_ACCUM="1",
+                      CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
         self.assertEqual(r.returncode, 0, f"STDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}")
-        # run manifest：config 记录 mode 与 sample seed（config hash 一部分）
-        man = json.load(open(os.path.join(self.res, "run_manifest.json")))
+        self.assertIn("random-r001 gate PASS", r.stdout)
+        # run manifest：config 记录 mode/seed/run id（config hash 一部分）
+        man = json.load(open(os.path.join(res, "run_manifest.json")))
         self.assertEqual(man["config"]["sample_mode"], "random")
         self.assertEqual(man["config"]["replay_sample_seed"], 424242)
+        self.assertEqual(man["config"]["random_replay_run_id"], rid)
         # replay sidecar manifest：构建器确实以 random+seed 运行（验收点 9 铁证）
         m = json.load(open(os.path.join(
-            self.tmp, "replay", "round2_train.json.manifest.json")))
+            replay, "round2_train.json.manifest.json")))
         self.assertEqual(m["mode"], "random")
         self.assertEqual(m["sample_seed"], 424242)
         self.assertEqual(m["sampling_algorithm"],
@@ -165,13 +185,54 @@ class TestOrchestratorDryRun(unittest.TestCase):
         # floor(12*0.1)=1：选中 1 条（具体哪条由 seed 决定）
         self.assertEqual(e["k"], 1)
         self.assertEqual(len(e["selected_indices"]), 1)
-        data = json.load(open(os.path.join(self.tmp, "replay", "round2_train.json")))
+        data = json.load(open(os.path.join(replay, "round2_train.json")))
         self.assertEqual(len(data), 1)
 
+    def test_random_gate_bad_seed_fails_fast(self):
+        """启动门：seed 非法 → preflight/训练之前即失败（无 manifest、无 preflight 报告）。"""
+        rid = "run_0000_seed_424242"
+        ckpt, res, replay = self._run_dirs(rid)
+        r = self._run("0.01", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="0",
+                      RANDOM_REPLAY_RUN_ID=rid,
+                      REPLAY_ACCUM="1",
+                      CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
+        self.assertNotEqual(r.returncode, 0)
+        out = r.stdout + r.stderr
+        self.assertIn("FAIL(random-r001 gate)", out)
+        self.assertIn("REPLAY_SAMPLE_SEED", out)
+        self.assertNotIn("运行数据 preflight", out, "门失败后不得进入 preflight")
+        self.assertFalse(os.path.exists(os.path.join(res, "run_manifest.json")))
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "preflight.json")))
+
+    def test_random_gate_dir_mismatch_fails_fast(self):
+        """启动门：目录属于别的 run → 失败。"""
+        rid = "run_0000_seed_424242"
+        other = "run_0000_seed_999999"
+        ckpt, res, replay = self._run_dirs(other)  # 目录属于 other run
+        r = self._run("0.01", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="424242",
+                      RANDOM_REPLAY_RUN_ID=rid,
+                      REPLAY_ACCUM="1",
+                      CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
+        self.assertNotEqual(r.returncode, 0)
+        out = r.stdout + r.stderr
+        self.assertIn("FAIL(random-r001 gate)", out)
+        self.assertIn("目录必须属于", out)
+
     def test_resume_replay_sample_seed_mismatch_fails(self):
-        r1 = self._run("0.1", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="111")
+        self._big_data()
+        rid1 = "run_0000_seed_111"
+        ckpt, res, replay = self._run_dirs(rid1)
+        r1 = self._run("0.01", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="111",
+                       RANDOM_REPLAY_RUN_ID=rid1,
+                       REPLAY_ACCUM="1",
+                       CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
         self.assertEqual(r1.returncode, 0, r1.stderr)
-        r2 = self._run("0.1", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="222")
+        # 同一目录用不同 seed + 不同 run id 重跑 → resume config hash 校验拒绝
+        rid2 = "run_0000_seed_222"
+        r2 = self._run("0.01", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="222",
+                       RANDOM_REPLAY_RUN_ID=rid2,
+                       REPLAY_ACCUM="1",
+                       CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
         self.assertNotEqual(r2.returncode, 0)
         out = r2.stdout + r2.stderr
         self.assertIn("config hash", out)

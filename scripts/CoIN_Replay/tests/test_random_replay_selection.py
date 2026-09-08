@@ -25,6 +25,10 @@ from helpers import ROOT, REPLAY_DIR, build_synthetic, run
 
 BUILD = [sys.executable, os.path.join(REPLAY_DIR, "build_replay_data.py")]
 SAMPLING_ALGORITHM = "sha256_task_seed_python_shuffle_v1"
+# legacy 对照固定到【父提交】（审计加固 2026-09-08）：不能 git show HEAD——提交后
+# HEAD 文件会变成新实现，形成"新旧自比较"假阳性。父提交 blob 不可变。
+LEGACY_COMMIT = "850db438d68ff59536a053076a22ee4ca727059a"
+LEGACY_PATH = "scripts/CoIN_Replay/build_replay_data.py"
 
 
 class TestRandomReplaySelection(unittest.TestCase):
@@ -53,12 +57,11 @@ class TestRandomReplaySelection(unittest.TestCase):
         return run(cmd)
 
     def _legacy_build(self, ratio, out):
-        """旧实现（baseline HEAD 的 build_replay_data.py）——验收点 1 的对照物。"""
+        """真·旧实现（父提交 850db43 的 build_replay_data.py）——验收点 1 的对照物。"""
         old_py = os.path.join(self.tmp, "build_replay_data_legacy.py")
         with open(old_py, "wb") as f:
             f.write(subprocess.check_output(
-                ["git", "show", "HEAD:scripts/CoIN_Replay/build_replay_data.py"],
-                cwd=ROOT))
+                ["git", "show", f"{LEGACY_COMMIT}:{LEGACY_PATH}"], cwd=ROOT))
         cmd = [sys.executable, old_py,
                "--tasks", "ScienceQA", "TextVQA",
                "--data-dir", self.data_dir, "--image-dir", self.img_dir,
@@ -67,6 +70,17 @@ class TestRandomReplaySelection(unittest.TestCase):
         return run(cmd)
 
     # ---- 验收点 1/2：prefix 完全兼容 ----------------------------------------
+    def test_1_legacy_is_not_self_comparison(self):
+        """防自比较：legacy blob 必须真的来自父提交且与当前实现字节不同。"""
+        legacy = subprocess.check_output(
+            ["git", "show", f"{LEGACY_COMMIT}:{LEGACY_PATH}"], cwd=ROOT)
+        current = open(os.path.join(REPLAY_DIR, "build_replay_data.py"), "rb").read()
+        self.assertNotEqual(hashlib.sha256(legacy).hexdigest(),
+                            hashlib.sha256(current).hexdigest(),
+                            "legacy 源 == 当前实现 = 自比较假阳性，测试失效")
+        self.assertIn(b"--sample-mode", current)
+        self.assertNotIn(b"--sample-mode", legacy)
+
     def test_1_prefix_byte_identical_to_legacy(self):
         out_new = os.path.join(self.tmp, "new_prefix.json")
         out_old = os.path.join(self.tmp, "old_prefix.json")
@@ -82,6 +96,12 @@ class TestRandomReplaySelection(unittest.TestCase):
         self.assertEqual(m_new["mode"], "prefix")
         for k in ("round", "ratio", "seed", "sources"):
             self.assertEqual(m_new[k], m_old[k], f"manifest.{k} 应与旧实现一致")
+        # prefix manifest schema 不增加 random 字段
+        for k in ("sample_seed", "sampling_algorithm"):
+            self.assertNotIn(k, m_new)
+        for t in ("ScienceQA", "TextVQA"):
+            self.assertNotIn("task_seed", m_new["sources"][t])
+        self.assertEqual(m_new["mode"], "prefix")
 
     def test_2_prefix_seed_irrelevant(self):
         o1 = os.path.join(self.tmp, "p1.json")
@@ -252,6 +272,20 @@ class TestRandomReplaySelection(unittest.TestCase):
         for t in ("ScienceQA", "TextVQA"):
             self.assertNotIn("task_seed", m["sources"][t],
                              "prefix source 不应新增 task_seed")
+
+
+    def test_9_invalid_inputs_fail_under_python_O(self):
+        """审计加固：校验用显式错误而非 assert——python -O 下门禁必须仍生效。"""
+        for extra in (["--ratio", "2.0"], ["--round", "1"]):
+            r = run([sys.executable, "-O"] + BUILD[1:] + [
+                "--tasks", "ScienceQA", "--data-dir", self.data_dir,
+                "--image-dir", self.img_dir, "--round", "3", "--ratio", "0.1",
+                "--sample-mode", "prefix", "--seed", "1",
+                "--out", os.path.join(self.tmp, "o.json"),
+            ] + extra)
+            self.assertNotEqual(r.returncode, 0,
+                                "python -O 下非法输入必须仍失败")
+            self.assertIn("ERROR", r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

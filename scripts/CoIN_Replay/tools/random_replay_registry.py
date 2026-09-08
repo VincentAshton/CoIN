@@ -6,10 +6,19 @@
   - index.csv     —— 同内容扁平表（供脚本/表格工具读取）
   - README.md     —— 两个标记块之间的状态表（<!-- registry-table:start/end -->）
 
-纪律（任务书六）：
+纪律（任务书六 + 2026-09-08 审计加固）：
   - 记录只能追加或 RUNNING -> COMPLETE/FAILED；不得删除失败记录
   - 不得复用已用 seed / run_number（单调递增 run_0001, run_0002, ...）
   - 不得改已完成行的指标（complete 后再次 complete 即报错）
+  - complete 只接受 COMPLETE 或 FAILED；不接受 RUNNING
+  - index.csv / index.json / README 一律 tmp+flush+fsync+os.replace 原子写
+
+提交协议（不允许伪造"当前提交自己的 SHA"；hash 由调用方在 commit 后回填）：
+  A = RUNNING 注册提交（register 后 commit+push）→ registration_commit
+  C = 六个轻量结果文件提交（assemble 产物 commit+push）→ result_commit
+  D = registry COMPLETE 提交（complete 更新 index，携带 A 与 C 的真实 hash）
+complete 必须提供 --registration-commit（=A）；--status COMPLETE 还必提供
+--result-commit（=C）。hash 用 `git log --format=%H --grep <run_id>` 反查，禁编造。
 
 用法:
   python tools/random_replay_registry.py <docdir> register [--seed N] [--started-at ISO]
@@ -69,12 +78,17 @@ def load_index(docdir):
 
 def write_index(docdir, idx):
     atomic_write(os.path.join(docdir, INDEX_JSON), idx)
-    # CSV 同步重写
-    with open(os.path.join(docdir, INDEX_CSV), "w", encoding="utf-8", newline="") as f:
+    # CSV 原子写（tmp + flush + fsync + os.replace）
+    csv_path = os.path.join(docdir, INDEX_CSV)
+    tmp = csv_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
         w.writeheader()
         for r in idx["runs"]:
             w.writerow(r)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, csv_path)
     # README 表格块重写
     rp = os.path.join(docdir, README_MD)
     text = open(rp, encoding="utf-8").read()
@@ -154,6 +168,14 @@ def _fill_from_summary(entry, summary_path):
 
 
 def cmd_complete(docdir, args):
+    if args.status not in ("COMPLETE", "FAILED"):
+        raise SystemExit(f"complete 只接受 COMPLETE 或 FAILED（收到 {args.status}）——"
+                         "RUNNING 是 register 的状态，禁止用 complete 写 RUNNING")
+    if not args.registration_commit:
+        raise SystemExit("complete 必须提供 --registration-commit（协议 A 的真实 hash，"
+                         "git log --grep <run_id> 反查）")
+    if args.status == "COMPLETE" and not args.result_commit:
+        raise SystemExit("COMPLETE 必须提供 --result-commit（协议 C 的真实 hash）")
     idx = load_index(docdir)
     for r in idx["runs"]:
         if r["run_id"] != args.run_id:
@@ -177,7 +199,8 @@ def cmd_complete(docdir, args):
             r["error_summary"] = args.error_summary
             r["MAA"] = None
             r["BWT"] = None
-        r["registration_commit"] = args.registration_commit or r["registration_commit"]
+            r["result_commit"] = args.result_commit or r["result_commit"]
+        r["registration_commit"] = args.registration_commit
         r["result_commit"] = args.result_commit or r["result_commit"]
         r["status"] = args.status
         if args.code_commit:
@@ -208,7 +231,7 @@ def main():
     p_reg.set_defaults(fn=cmd_register)
     p_com = sub.add_parser("complete")
     p_com.add_argument("--run-id", required=True)
-    p_com.add_argument("--status", choices=ALLOWED_STATUS, required=True)
+    p_com.add_argument("--status", choices=("COMPLETE", "FAILED"), required=True)
     p_com.add_argument("--summary", default=None)
     p_com.add_argument("--maa", type=float, default=None)
     p_com.add_argument("--bwt", type=float, default=None)

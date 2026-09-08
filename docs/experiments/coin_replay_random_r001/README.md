@@ -15,6 +15,21 @@ REPLAY_SAMPLE_SEED）。基线分支 `experiment/coin-replay-presweep-20260903`�
   判断进度，同 seed 同目录恢复；语义性改动（算法/超参/数据/模型/任务序/ratio/指标）
   必须另开 r002 系列。
 - index 只追加或 RUNNING → COMPLETE/FAILED；失败记录保留；run_number 单调递增。
+- **启动姿势（2026-09-08 审计加固）**：正式 random 运行必须显式提供
+  `RANDOM_REPLAY_RUN_ID=run_NNNN_seed_<seed>`（与 REPLAY_SAMPLE_SEED 一致）；
+  run_replay_exp.sh 在 preflight 之前执行 fail-fast 门：SAMPLE_MODE=random、
+  RATIO=0.01、REPLAY_SAMPLE_SEED 为正 31-bit、REPLAY_ACCUM=1、
+  run ID 格式/seed 一致、CKPT_ROOT/RES_ROOT/REPLAY_DATA_DIR 同属
+  `CoIN_Replay_random/r001/<run_id>` 且互异、MASTER_PORT/GPUS/WORLD 自洽。
+  run ID 同时进 run manifest / config hash / resume 校验（coin_lib）。
+  不设 RANDOM_REPLAY_RUN_ID = 旧 prefix 语义，行为不变。
+- **提交协议（registry）**：A=RUNNING 注册提交 → registration_commit；
+  C=六轻量结果文件提交 → result_commit；D=registry COMPLETE 提交（携带 A、C 真实
+  hash）。禁伪造"当前提交自己的 SHA"（hash 用 `git log --grep <run_id>` 反查）。
+  complete 只接受 COMPLETE/FAILED；RUNNING 由 register 写。
+- **canary 约定**：阶段 B 短验证（非正式 run、不登记）用保留 run id
+  `run_0000_seed_<seed>`（canary seed 固定 1234）与隔离 canary 目录，绝不占用
+  run_0001+ 正式目录。
 
 ## 抽样算法（sha256_task_seed_python_shuffle_v1）
 
@@ -51,9 +66,12 @@ playground/  Replay_random/r001/<run_id>/        round{2..4}_train.json(+.manife
 ## 工具
 
 - `scripts/CoIN_Replay/tools/random_replay_registry.py` —— index.json/csv/README 表维护
-  （register / complete / list；append-only 校验）。
-- `scripts/CoIN_Replay/tools/random_replay_finalize.py` —— assemble（云端验收+脱敏瘦身导出，
-  任务书十一全部检查通过才写发布目录）/ fill-delta（本地填 prefix 基线差值）。
+  （register / complete / list；append-only；三文件原子写；complete 禁 RUNNING、
+  强制 registration/result commit）。
+- `scripts/CoIN_Replay/tools/random_replay_finalize.py` —— assemble（云端验收+脱敏瘦身
+  导出：sibling staging 组装 → 全 PASS → 原子换入；强制 sampling_algorithm 常量、
+  源数据独立重建 selected_indices、六文件敏感扫描；`--test-mode` 仅零 GPU 单测降级并
+  显式标注）/ fill-delta（本地填 prefix 基线差值）。
 
 ## 状态
 

@@ -141,8 +141,13 @@ def sample_id(s):
 
 def main():
     args = parse_args()
-    assert 0 < args.ratio <= 1.0, "ratio 必须在 (0,1]"
-    assert args.round >= 2, "round 1 无需 replay（没有历史任务）"
+    # 显式校验（不用 assert：python -O 下 assert 被剥离，门禁必须始终生效）
+    if not (0 < args.ratio <= 1.0):
+        print(f"[build_replay] ERROR: ratio 必须在 (0,1]，收到 {args.ratio}")
+        sys.exit(1)
+    if args.round < 2:
+        print(f"[build_replay] ERROR: round 1 无需 replay（没有历史任务），收到 round={args.round}")
+        sys.exit(1)
     prev_tasks = args.tasks[: args.round - 1]
     if not prev_tasks:
         print(f"[build_replay] round {args.round}: 无历史任务，跳过")
@@ -252,8 +257,14 @@ def main():
         manifest["sample_seed"] = args.seed
         manifest["sampling_algorithm"] = SAMPLING_ALGORITHM
     mpath = args.out.with_suffix(".json.manifest.json")
-    with open(mpath, "w", encoding="utf-8") as f:
+    # 原子写（tmp + flush + fsync + os.replace）：manifest 是重建/验收的权威输入，
+    # 半成品不可见
+    tmp_m = str(mpath) + ".tmp"
+    with open(tmp_m, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_m, mpath)
     print(f"[build_replay] round {args.round} replay: {len(replay)} 条 -> {args.out}")
     print(f"[build_replay] sidecar manifest -> {mpath}")
 

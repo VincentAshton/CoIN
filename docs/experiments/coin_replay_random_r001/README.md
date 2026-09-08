@@ -15,6 +15,10 @@ REPLAY_SAMPLE_SEED）。基线分支 `experiment/coin-replay-presweep-20260903`�
   判断进度，同 seed 同目录恢复；语义性改动（算法/超参/数据/模型/任务序/ratio/指标）
   必须另开 r002 系列。
 - index 只追加或 RUNNING → COMPLETE/FAILED；失败记录保留；run_number 单调递增。
+- **系列公开规则（run_0001 起，2026-09-09）**：本系列累计 **5 个 COMPLETE 后停止**，
+  不注册第 6 个；replay sample seed 一律由 registry 在启动前以 SystemRandom **即时生成**
+  （禁止人工指定/筛选/复用）；**全部运行公开**——RUNNING/FAILED/COMPLETE 记录永久保留，
+  不隐藏不删除；**禁止以指标（MAA/BWT）为导向停止或隐藏结果**；失败按技术原因记 FAILED。
 - **启动姿势（2026-09-08 审计加固）**：正式 random 运行必须显式提供
   `RANDOM_REPLAY_RUN_ID=run_NNNN_seed_<seed>`（与 REPLAY_SAMPLE_SEED 一致）；
   run_replay_exp.sh 在 preflight 之前执行 fail-fast 门：SAMPLE_MODE=random、

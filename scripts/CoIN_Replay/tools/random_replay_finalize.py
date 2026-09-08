@@ -493,13 +493,31 @@ def assemble(args) -> int:
                   indent=2, ensure_ascii=False)
         # 注：validation_report 不再追加 summary 行（避免 repro 哈希自指循环）；
         # 发布物完整性由 summary.json 的 repro 字段（覆盖其余五文件）保证
-        # 敏感扫描门（六文件逐字扫；命中即 FAIL，绝不换入）
+        # 敏感扫描门（六文件逐字扫；命中即 FAIL，绝不换入）。报告须含此门 → PASS 后回写
         hits = scan_export(staging)
         check("发布 6 文件脱敏扫描（无绝对路径/IP/主机名/凭据）", not hits,
               "; ".join(hits) if hits else "clean")
         if hits:
-            print("=== 敏感信息扫描未过，禁止发布（既有发布目录未动） ===")
+            print("=== 敏感信息扫描未过，禁止发布（既有发布目录未动） ===\n")
             for h in hits:
+                print(f"  HIT: {h}")
+            return 1
+        scan_row = "| 发布 6 文件脱敏扫描（无绝对路径/IP/主机名/凭据） | PASS | clean |\n"
+        with open(os.path.join(staging, "validation_report.md"), "a",
+                  encoding="utf-8") as f:
+            f.write("\n" + scan_row)
+        # 报告已含扫描 PASS 行 → 重算 repro（覆盖其余五文件），重写 summary
+        summary["repro"] = {}
+        for fname in ALLOWED_PUB:
+            p = os.path.join(staging, fname)
+            if os.path.isfile(p) and fname != "summary.json":
+                summary["repro"][fname] = sha256_file(p)
+        json.dump(summary, open(os.path.join(staging, "summary.json"), "w"),
+                  indent=2, ensure_ascii=False)
+        hits2 = scan_export(staging)  # summary 已更新，二次确认
+        if hits2:
+            print("=== 敏感信息二次扫描未过，禁止发布 ===\n")
+            for h in hits2:
                 print(f"  HIT: {h}")
             return 1
         # 原子换入

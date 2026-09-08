@@ -50,17 +50,32 @@ seed / 结果**（index.json runs=[] 必须保持）。
 - 4×A100 训练/评估任何真实执行
 - prefix 历史 manifest 对照（需要云端数据文件）
 
-## 阶段 B（云端 canary 预启动）—— 待用户通知「ebcloud 30267 已启动」
+## 阶段 B（云端 canary 预启动）—— 2026-09-09 完成（实例 30267）
 
-> 以下由阶段 B 执行后回填（PASS/FAIL/命令/返回码/版本/脱敏 hash），GO/NO-GO 判定亦在此。
+- 云端 checkout 精确 commit：**16f27d4469b07225bdcf820e43bac915809e4bbd**
+  （阶段 A=605a39f；阶段 B 审计中发现 finalize 报告缺扫描门行 → 修复 16f27d4，两版全测）
+- 环境：4×A100-80GB 空闲；torch 2.0.1+cu118 / transformers 4.32.0 / peft 0.4.0 /
+  deepspeed 0.14.0 / flash-attn 2.5.6 / accelerate 0.21.0 / python 3.10.21 / pillow 10.3.0
+  / NCCL True；/root/data 503G avail、inode 富余、RAM 1007G、shm 200G
+- 全套测试（torch 实际执行）：**Ran 120, OK, skip=0**（@605a39f 与 @16f27d4 各一次）
+- prefix manifest 对照：超参与任务序/ratio 全等；data_revision=bf6bd4ee…、
+  model_config_hash=5fe5a4b3…、ds_config_hash=4e0c4eb1… **相等**；仅差允许项
+  （sample_mode/replay_sample_seed/random_replay_run_id）与工作目录绝对路径前缀
+- 全新 PREFLIGHT_REPORT + 全量图片检查（--layout-map、无 --skip-pil）：PASS（约 13min）
+- 真实数据 replay canary（seed=1234，r2/3/4）：双重建 json 逐字节一致；独立重建
+  task_seed/排列/k/idx/ids 全等；全部选中图 PIL 可读；SQA idx_sha 跨 round 相同
+  （task seed 不含 round 实证）
+- DRY_RUN 编排 canary：gate PASS → 4 rounds → .complete，rc=0（隔离目录 run_0000_seed_1234）
+- GPU/DS：smoke_gpu rc=0（4 卡 NCCL + flash fwd/bwd + bf16）；smoke_ds rc=0（4 rank
+  zero3_offload 真 step + 参数变化断言）；probe_logits 真实 task/replay ckpt 重载一致 +
+  logits 不同；真实 tensor-diff r4 **448/448 changed** exit 0；8 题真实最小评估 +
+  verify-predictions/artifact-check rc=0
+- finalize canary：assemble rc=0（staging 原子换入 6 文件，报告含扫描 PASS 行）；
+  registry 生命周期由云端全套测试覆盖（临时副本，真实 index 未动）
+- 正式目录零污染：project & project_audit 下 CoIN_Replay_random/Replay_random 均不存在；
+  prefix checkpoints/results 完好；**index.json runs=[]**
+- **判定：GO**（正式启动 env 预览见 PRELAUNCH_AUDIT.json；未执行）
 
-- [ ] 云端 clean worktree checkout 精确 AUDITED_COMMIT
-- [ ] 4×A100 可见空闲；CUDA/NCCL/torch/DS/transformers/peft/flash-attn 版本；磁盘/inode/RAM/shm/MASTER_PORT
-- [ ] 全套测试（torch 依赖 SKIP 必须实际执行；相关 SKIP = NO-GO）
-- [ ] prefix 历史 manifest 对照（只允许预期字段差）
-- [ ] 全新 PREFLIGHT_REPORT + 全量图片检查（--skip-pil 禁用）
-- [ ] canary seed=1234 真实数据 replay 构建（round2/3/4，双重建一致 + 图片可读）
-- [ ] 隔离 canary 目录 DRY_RUN 编排（禁正式目录）
-- [ ] 分钟级 GPU/DS 验证（4 卡通信/加载/单步/ckpt 存取/tensor-diff/最小 eval）
-- [ ] finalize + registry 临时副本生命周期（不污染真实 index）
-- [ ] 输出 PRELAUNCH_AUDIT.json（逐项证据）
+## 阶段 B 检查清单明细（PASS/FAIL/命令/证据）
+
+见 **PRELAUNCH_AUDIT.json**（结构化，同目录）。

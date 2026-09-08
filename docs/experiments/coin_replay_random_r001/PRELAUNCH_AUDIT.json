@@ -1,0 +1,72 @@
+{
+  "series": "CoIN random-replay r001",
+  "phase": "B (cloud prelaunch canary)",
+  "date": "2026-09-09",
+  "audited_commit": "16f27d4469b07225bdcf820e43bac915809e4bbd",
+  "audited_commit_prev": "605a39fa515ec6e40fe3838e3baa27724d0e36e8 (阶段 A)",
+  "cloud": {
+    "instance": "ebcloud 30267",
+    "worktree": "/root/data/coin/project_audit",
+    "checkout_commit": "16f27d4469b07225bdcf820e43bac915809e4bbd",
+    "checkout_exact": true,
+    "gpu": "4x NVIDIA A100-SXM4-80GB, 0 MiB used, 0% util at audit start",
+    "disk": "/root/data 503G avail, inode 1.28M free",
+    "ram": "1007G total / shm 200G tmpfs"
+  },
+  "versions": {
+    "python": "3.10.21", "torch": "2.0.1+cu118", "cuda": "11.8",
+    "transformers": "4.32.0", "peft": "0.4.0", "deepspeed": "0.14.0",
+    "flash_attn": "2.5.6", "accelerate": "0.21.0", "pillow": "10.3.0",
+    "nccl": true, "gpu_count": 4
+  },
+  "tests": [
+    {"env": "cloud conda coin @ 605a39f", "run": 120, "fail": 0, "error": 0, "skip": 0, "note": "torch tensor suite executed"},
+    {"env": "cloud conda coin @ 16f27d4", "run": 120, "fail": 0, "error": 0, "skip": 0, "note": "finalize fix re-full-test"},
+    {"env": "local WSL zero-GPU @ 605a39f", "run": 120, "fail": 0, "error": 0, "skip": 9, "note": "9 skips = test_ckpt_tensor_diff torch-only"}
+  ],
+  "checks": [
+    {"item": "GPU/版本/资源", "result": "PASS", "evidence": "见 versions；4 卡空闲"},
+    {"item": "全套测试 torch 实际执行", "result": "PASS", "evidence": "120 run 0 skip x2"},
+    {"item": "prefix manifest 对照", "result": "PASS", "evidence": "超参/任务序/ratio 全等；data_revision=bf6bd4ee… model_config_hash=5fe5a4b3… ds_config_hash=4e0c4eb1… 相等；仅差 sample_mode/replay_sample_seed/random_replay_run_id + 工作目录绝对路径前缀(project vs project_audit, 内容同)"},
+    {"item": "全新 preflight + 全量图片检查", "result": "PASS", "evidence": "PREFLIGHT_REPORT=canary 新路径；--layout-map ImageNet_withlabel；无 --skip-pil；约13min；preflight_canary.json 产出"},
+    {"item": "真实数据 replay canary (seed=1234 r2/3/4)", "result": "PASS", "evidence": "A/B 双重建 json 逐字节一致；manifest 仅 created_at/output.path 差；独立重建 task_seed/perm/k=floor(N*0.01)/indices/ids 全等；选中图 PIL 可读 (SQA66/TVQA346/INet1298 等)；SQA idx_sha 跨 round 相同=f42cba8f…(task seed 不含 round 实证)；N=12726/34602/129833"},
+    {"item": "DRY_RUN 编排 canary (run_0000_seed_1234)", "result": "PASS", "evidence": "gate PASS → preflight → round1-4 → aggregate → .complete；rc=0；coin_metrics MAA=42.0(DRY 假值)；隔离目录 /root/data/coin/tmp/prelaunch_audit/canary_run"},
+    {"item": "4 卡通信+DS 冒烟", "result": "PASS", "evidence": "smoke_gpu rc=0 (NCCL/flash-attn fwd+bwd/bf16 matmul)；smoke_ds rc=0 4 rank (zero3_offload 真 step、参数变化断言、全局 PASS)"},
+    {"item": "真实模型加载+推理探针", "result": "PASS", "evidence": "probe_logits prefix-0.01 round4 task&replay：identical_across_loads=True×2；logits task≠replay (qid4/5)；data_sha256=e533e0df…"},
+    {"item": "checkpoint tensor-diff（真实训练 ckpt）", "result": "PASS", "evidence": "r4 task vs replay：changed 448/448、hash_differs=True、finite=True、exit 0"},
+    {"item": "最小真实评估 + prediction 校验", "result": "PASS", "evidence": "8 题真实 SQA 子集 (含文本/图片题) @ round4_replay：merge.jsonl 8/8；verify-predictions rc=0 (count/unique/order)；artifact-check rc=0。注：官方 acc 例程按全量 4241 口径统计 → 子集 acc 无意义不呈报"},
+    {"item": "finalize canary 生命周期", "result": "PASS", "evidence": "assemble --test-mode rc=0：staging→原子换入 6 文件；报告含扫描 PASS 行；repro 覆盖 5 文件；错误路径(seed/路径/SHA/算法/已有 out/泄漏)由 120 测试覆盖"},
+    {"item": "registry 临时副本生命周期", "result": "PASS", "evidence": "120 测试含 registry 套件 (临时目录副本)；云端执行通过"},
+    {"item": "正式目录零污染", "result": "PASS", "evidence": "project & project_audit 下 CoIN_Replay_random/Replay_random 均 absent；prefix checkpoints/results 完好；index.json runs=[]"}
+  ],
+  "canary_dirs": {
+    "replay_AB": "/root/data/coin/tmp/prelaunch_audit/canary_rep/{A,B}",
+    "dryrun_run": "/root/data/coin/tmp/prelaunch_audit/canary_run (run_0000_seed_1234)",
+    "mini_eval": "/root/data/coin/tmp/prelaunch_audit/canary_eval",
+    "finalize_export": "/root/data/coin/tmp/prelaunch_audit/canary_export",
+    "logs": "/root/data/coin/logs/prelaunch_audit/"
+  },
+  "verdict": "GO",
+  "notes": [
+    "环境 PATH 需含 conda env（裸 python3 才有 PIL/torch）——正式启动器必须 export PATH",
+    "probe manifest 按设计写入原 prefix ckpt 父目录（gitignored，不污染 git）",
+    "阶段 A 与 B 之间新增 16f27d4（finalize 扫描门回写报告 + repro 顺序修复），两 commit 均全测"
+  ],
+  "formal_launch_env_preview": {
+    "SAMPLE_MODE": "random", "RATIO": "0.01", "REPLAY_ACCUM": "1",
+    "SEED": "1234", "DATA_SEED": "1234",
+    "REPLAY_SAMPLE_SEED": "<run 登记 seed>",
+    "RANDOM_REPLAY_RUN_ID": "run_0001_seed_<同 seed>",
+    "GPUS": "0,1,2,3", "BATCH": "14", "ACCUM": "16", "LR": "2e-4",
+    "EPOCHS": "1", "REPLAY_EPOCHS": "1", "ENFORCE_MIN_STEPS": "1",
+    "MASTER_PORT": "<未占用, 如 29600>",
+    "PATH": "/root/data/coin/conda_envs/coin/bin:$PATH",
+    "CKPT_ROOT": "<正式>/checkpoints/CoIN_Replay_random/r001/<run_id>",
+    "RES_ROOT": "<正式>/results/CoIN_Replay_random/r001/<run_id>",
+    "REPLAY_DATA_DIR": "<正式>/playground/Replay_random/r001/<run_id>",
+    "PREFLIGHT_REPORT": "<run RES_ROOT>/preflight.json",
+    "PREFLIGHT_ARGS": "--layout-map {\"ImageNet\":\"ImageNet_withlabel\"}",
+    "TASKS_JSON": "[\"ScienceQA\",\"TextVQA\",\"ImageNet\",\"GQA\"]",
+    "executed": false
+  }
+}

@@ -82,6 +82,7 @@ playground/  Replay_random/r001/<run_id>/        round{2..4}_train.json(+.manife
 <!-- registry-table:start -->
 | Run | Replay sample seed | MAA | BWT | Status | Result commit |
 |-----|--------------------|-----|-----|--------|---------------|
+| run_0001_seed_358341059 | 358341059 |  |  | RUNNING |  |
 <!-- registry-table:end -->
 
 （表由 random_replay_registry.py 自动维护；index.json 为权威记录，含

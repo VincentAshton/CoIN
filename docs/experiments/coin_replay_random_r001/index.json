@@ -17,5 +17,24 @@
       "source": "results/coin-replay-r010-20260904 分支 docs/experiments/coin_replay/ratio_0.01/coin_metrics.json"
     }
   },
-  "runs": []
+  "runs": [
+    {
+      "run_number": 1,
+      "run_id": "run_0001_seed_358341059",
+      "replay_sample_seed": 358341059,
+      "status": "RUNNING",
+      "started_at": "2026-09-09T04:09:47+08:00",
+      "completed_at": null,
+      "MAA": null,
+      "BWT": null,
+      "result_directory": "results/CoIN_Replay_random/r001/run_0001_seed_358341059",
+      "code_commit": null,
+      "data_revision": null,
+      "model_config_hash": null,
+      "config_hash": null,
+      "error_summary": null,
+      "registration_commit": null,
+      "result_commit": null
+    }
+  ]
 }

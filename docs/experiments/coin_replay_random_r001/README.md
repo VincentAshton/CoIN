@@ -85,6 +85,7 @@ playground/  Replay_random/r001/<run_id>/        round{2..4}_train.json(+.manife
 | run_0001_seed_358341059 | 358341059 | 62.853 | 7.9354 | COMPLETE | de8bfcac25bf28f57160e99be5c887c7914cee22 |
 | run_0002_seed_1608950547 | 1608950547 | 61.4747 | 16.8063 | COMPLETE | d640ebdbe3500624f7fc542bdef56e66c1dbaae3 |
 | run_0003_seed_2089198544 | 2089198544 | 61.1599 | 8.6152 | COMPLETE | d8d361cbebacc24cb2bb960953ed528dd7518adb |
+| run_0004_seed_1212218766 | 1212218766 |  |  | RUNNING |  |
 <!-- registry-table:end -->
 
 （表由 random_replay_registry.py 自动维护；index.json 为权威记录，含

@@ -71,6 +71,24 @@
       "error_summary": null,
       "registration_commit": "b5a829d45087355328e5cdcd3b798210bab8ed74",
       "result_commit": "d8d361cbebacc24cb2bb960953ed528dd7518adb"
+    },
+    {
+      "run_number": 4,
+      "run_id": "run_0004_seed_1212218766",
+      "replay_sample_seed": 1212218766,
+      "status": "RUNNING",
+      "started_at": "2026-09-10T02:38:50+08:00",
+      "completed_at": null,
+      "MAA": null,
+      "BWT": null,
+      "result_directory": "results/CoIN_Replay_random/r001/run_0004_seed_1212218766",
+      "code_commit": null,
+      "data_revision": null,
+      "model_config_hash": null,
+      "config_hash": null,
+      "error_summary": null,
+      "registration_commit": null,
+      "result_commit": null
     }
   ]
 }

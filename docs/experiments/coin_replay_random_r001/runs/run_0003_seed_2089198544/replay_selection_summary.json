@@ -1,0 +1,150 @@
+{
+  "run_id": "run_0003_seed_2089198544",
+  "sample_seed": 2089198544,
+  "rounds": {
+    "2": {
+      "mode": "random",
+      "sample_seed": 2089198544,
+      "sampling_algorithm": "sha256_task_seed_python_shuffle_v1",
+      "output_sha256": "8512cf730c91ad706a43f01f83575144b778e46f075fa71a14a9bb401a630eda",
+      "tasks": {
+        "ScienceQA": {
+          "N": 12726,
+          "k": 127,
+          "task_seed": "ff3f943686955cb10992ef50fb4ffd93df40c9324cfd3231547e2bb3014ba30c",
+          "source_sha256": "ca105844a0d5785ad4e78a73d83314d50d46570aa76ea2cd7a06ea8cb09d0583",
+          "selected_ids_sha256": "01c3509c54a18533a8e6c9745f33698cea993f8aee3d613a8dde933084b84217",
+          "selected_indices_sha256": "2aab881ea97d5791419d41e61ddd9eff85f0b7cb09cd8914722b86127bf16c60",
+          "example_ids": [
+            "16558",
+            "16389",
+            "13558",
+            "12584",
+            "3786",
+            "16844",
+            "12220",
+            "6226",
+            "8925",
+            "12946"
+          ]
+        }
+      }
+    },
+    "3": {
+      "mode": "random",
+      "sample_seed": 2089198544,
+      "sampling_algorithm": "sha256_task_seed_python_shuffle_v1",
+      "output_sha256": "4e13bf61b76498d421c45e372166611b787953e31b4f0acdfe656d9b15452a9d",
+      "tasks": {
+        "ScienceQA": {
+          "N": 12726,
+          "k": 127,
+          "task_seed": "ff3f943686955cb10992ef50fb4ffd93df40c9324cfd3231547e2bb3014ba30c",
+          "source_sha256": "ca105844a0d5785ad4e78a73d83314d50d46570aa76ea2cd7a06ea8cb09d0583",
+          "selected_ids_sha256": "01c3509c54a18533a8e6c9745f33698cea993f8aee3d613a8dde933084b84217",
+          "selected_indices_sha256": "2aab881ea97d5791419d41e61ddd9eff85f0b7cb09cd8914722b86127bf16c60",
+          "example_ids": [
+            "16558",
+            "16389",
+            "13558",
+            "12584",
+            "3786",
+            "16844",
+            "12220",
+            "6226",
+            "8925",
+            "12946"
+          ]
+        },
+        "TextVQA": {
+          "N": 34602,
+          "k": 346,
+          "task_seed": "51e2242b7b9b03c2acde742e23930079c7360ddc7606e41c5a78c3ba948eea5a",
+          "source_sha256": "f66b18eac145d7fda2609ecf48a714137239dae2c965adc1fcff3b7707e61479",
+          "selected_ids_sha256": "b7b81bcbe23158de71cb30e679e511108f03d23db11e087d3aa8ffa2e53cefa6",
+          "selected_indices_sha256": "4fe1bc689202eef9286d1f8524259b957251cbca243d5af9e0859eca39a85fd8",
+          "example_ids": [
+            "caace08017f7362a",
+            "be6101cfbef827a4",
+            "22f40fc1796bdbe9",
+            "cea8d20c01159255",
+            "1d875b6e245ae3fa",
+            "2767bfeda4c26a4e",
+            "ce7da1765e505455",
+            "56619c71bcb7e0d6",
+            "695ed2370d7e6b67",
+            "443c2d287f0ef07a"
+          ]
+        }
+      }
+    },
+    "4": {
+      "mode": "random",
+      "sample_seed": 2089198544,
+      "sampling_algorithm": "sha256_task_seed_python_shuffle_v1",
+      "output_sha256": "5907cbce45050b01003af09ef3d920c122d74c6f825e7b76b038f68675c11903",
+      "tasks": {
+        "ScienceQA": {
+          "N": 12726,
+          "k": 127,
+          "task_seed": "ff3f943686955cb10992ef50fb4ffd93df40c9324cfd3231547e2bb3014ba30c",
+          "source_sha256": "ca105844a0d5785ad4e78a73d83314d50d46570aa76ea2cd7a06ea8cb09d0583",
+          "selected_ids_sha256": "01c3509c54a18533a8e6c9745f33698cea993f8aee3d613a8dde933084b84217",
+          "selected_indices_sha256": "2aab881ea97d5791419d41e61ddd9eff85f0b7cb09cd8914722b86127bf16c60",
+          "example_ids": [
+            "16558",
+            "16389",
+            "13558",
+            "12584",
+            "3786",
+            "16844",
+            "12220",
+            "6226",
+            "8925",
+            "12946"
+          ]
+        },
+        "TextVQA": {
+          "N": 34602,
+          "k": 346,
+          "task_seed": "51e2242b7b9b03c2acde742e23930079c7360ddc7606e41c5a78c3ba948eea5a",
+          "source_sha256": "f66b18eac145d7fda2609ecf48a714137239dae2c965adc1fcff3b7707e61479",
+          "selected_ids_sha256": "b7b81bcbe23158de71cb30e679e511108f03d23db11e087d3aa8ffa2e53cefa6",
+          "selected_indices_sha256": "4fe1bc689202eef9286d1f8524259b957251cbca243d5af9e0859eca39a85fd8",
+          "example_ids": [
+            "caace08017f7362a",
+            "be6101cfbef827a4",
+            "22f40fc1796bdbe9",
+            "cea8d20c01159255",
+            "1d875b6e245ae3fa",
+            "2767bfeda4c26a4e",
+            "ce7da1765e505455",
+            "56619c71bcb7e0d6",
+            "695ed2370d7e6b67",
+            "443c2d287f0ef07a"
+          ]
+        },
+        "ImageNet": {
+          "N": 129833,
+          "k": 1298,
+          "task_seed": "9ddc88b632f97f34c1b32a2e908993fa4988236757357c9f6d95f5fe54e4d5ff",
+          "source_sha256": "bdf3cb8b76a39c7534f49a839327201be42667a832521015b83e874a0ff413d5",
+          "selected_ids_sha256": "1e19427104a2cfdc4e326d8121c28fea49c3bf8269e63f13f748ac4685539a29",
+          "selected_indices_sha256": "86c2d7e08239e297a427c46fec5685ddd0840d1acd47b81679648d8097c73553",
+          "example_ids": [
+            "n02134418/n02134418_1471.JPEG",
+            "n03297495/n03297495_3160.JPEG",
+            "n03291819/n03291819_26244.JPEG",
+            "n04417672/n04417672_16165.JPEG",
+            "n02093991/n02093991_1895.JPEG",
+            "n04371774/n04371774_65.JPEG",
+            "n03590841/n03590841_301.JPEG",
+            "n02128925/n02128925_61556.JPEG",
+            "n03793489/n03793489_10290.JPEG",
+            "n02134418/n02134418_1957.JPEG"
+          ]
+        }
+      }
+    }
+  }
+}

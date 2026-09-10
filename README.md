@@ -5,7 +5,8 @@
 （研究问题：回放比例降到多少时 Truth Alignment 明显下降）。
 
 > 实验记录与完整内部文档已归档至 `docs/internal/`（HANDOFF.md / EXPERIMENT_LOG.md /
-> RUNBOOK.md / dataset.md）；本 README 只保留对外可见的导航与状态。
+> RUNBOOK.md / dataset.md；另含 `audit_20260904/` = 2026-09-04 跨层审计包与两次正式运行
+> 启动快照）；本 README 只保留对外可见的导航与状态。
 > **想从零复现本实验 → 直接读 [REPRODUCE.md](REPRODUCE.md)**（环境/数据/门禁/运行/验收全流程）。
 
 ## 实验概况

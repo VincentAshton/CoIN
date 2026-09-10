@@ -54,14 +54,14 @@ CoIN（arXiv:2403.08350）前 4 任务顺序 LoRA 持续学习 + TRACE 式 repla
 
 ## 3. 指标定义（CoIN 官方口径）
 
-设 A 为 T×T 矩阵，`A[j][i]` = 第 j 轮结束后任务 i 的得分（T=4，未评估单元计 0，不参与求和）：
+设 A 为 T×T 矩阵，`A_{j,i}` = 第 j 轮结束后任务 i 的得分（T=4，下标 1..T，未评估单元计 0，不参与求和）：
 
 ```
-MAA = (1/T) · Σ(j=1..T) [ (1/j) · Σ(i=1..j) A[j][i] ]
-BWT = (1/T) · Σ(i=1..T) ( A[T][i] − A[i][i] )
-final_avg    = (1/T) · Σ(i=1..T) A[T][i]
-final_old_task_mean = (1/(T−1)) · Σ(i=1..T−1) A[T][i]
-diagonal_mean       = (1/T) · Σ(i=1..T) A[i][i]
+MAA = (1/T) · Σ(j=1..T) [ (1/j) · Σ(i=1..j) A_{j,i} ]
+BWT = (1/T) · Σ(i=1..T) ( A_{T,i} − A_{i,i} )
+final_avg    = (1/T) · Σ(i=1..T) A_{T,i}
+final_old_task_mean = (1/(T−1)) · Σ(i=1..T−1) A_{T,i}
+diagonal_mean       = (1/T) · Σ(i=1..T) A_{i,i}
 ```
 
 - MAA：**先计算每一轮结束后所有已学习任务的平均准确率，再对 T 个轮次等权平均**；
@@ -141,7 +141,7 @@ diagonal_mean       = (1/T) · Σ(i=1..T) A[i][i]
 **以上是五次 random 运行均值与单次 prefix 基线之间的描述性差值。prefix 基线不是一个多 seed
 分布，因此这些差值不能解释为配对效应、置信区间或统计显著性。**
 
-### 5.6 终局相对对角的变化（per_task_final_minus_diagonal，A[T][i] − A[i][i]）
+### 5.6 终局相对对角的变化（per_task_final_minus_diagonal，A_{T,i} − A_{i,i}）
 
 | run | ScienceQA | TextVQA | ImageNet | GQA |
 |---|---|---|---|---|
@@ -151,7 +151,7 @@ diagonal_mean       = (1/T) · Σ(i=1..T) A[i][i]
 | 0004 | −7.9934 | −4.5900 | +38.8000 | 0.0 |
 | 0005 | −3.8199 | −2.8700 | +73.9300 | 0.0 |
 
-（GQA 恒 0 = 最后一轮新学任务，A[T][3] 即其对角项。）
+（GQA 恒 0 = 最后一轮新学任务，A_{T,T} 即其对角项。）
 
 ## 6. 结果解读（报告作者观点，供审核挑战）
 

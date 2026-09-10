@@ -1,4 +1,4 @@
-# Random Replay ratio=0.01 —— ongoing experiments（codex 系列）
+# Random Replay ratio=0.01 —— completed series（已完成实验系列）
 
 长期实验系列：**ratio=0.01 随机 replay 样本选择**（固定 SAMPLE_MODE=random、
 RATIO=0.01、REPLAY_ACCUM=1、SEED=1234、DATA_SEED=1234；每次只变
@@ -105,4 +105,4 @@ registration_commit/result_commit 全字段 + prefix 基线数值。）
 | prefix ratio=0.10（2026-09-04） | 57.5057 | +17.2306 | 55.7834 |
 | prefix ratio=0.01（2026-09-05） | 60.4406 | −13.6299 | 46.1925 |
 
-差值口径（summary.json deltas）：本 run − 对应基线，四项全精度指标逐项。
+差值口径（summary.json deltas）：本 run − 对应基线，三项已发布指标（MAA / CoIN BWT / final_avg）逐项比较。

@@ -12,17 +12,26 @@ LLaVA-1.5 顺序 LoRA 微调持续学习基准）的个人 fork，用于运行 *
 | **实验结果（ratio=0.10 与 0.01 均完成）** | → `results/coin-replay-r010-20260904` 分支<br>[github.com/…/tree/results/coin-replay-r010-20260904](https://github.com/VincentAshton/CoIN/tree/results/coin-replay-r010-20260904)（双 A 矩阵 / MAA / BWT / 对比分析 / 验收） |
 | **实验运行代码与工具** | → `experiment/coin-replay-presweep-20260903` 分支（编排/门禁/测试 + 实验导向 README） |
 | **从零完整复现**（环境/数据/门禁/运行/验收） | → `experiment` 分支的 `REPRODUCE.md`<br>[github.com/…/blob/experiment/…/REPRODUCE.md](https://github.com/VincentAshton/CoIN/blob/experiment/coin-replay-presweep-20260903/REPRODUCE.md) |
-| **Random Replay ratio=0.01 ongoing experiments** | → `codex/coin-replay-random-r001` 分支<br>[github.com/…/tree/codex/coin-replay-random-r001](https://github.com/VincentAshton/CoIN/tree/codex/coin-replay-random-r001/docs/experiments/coin_replay_random_r001/README.md) |
+| **Random Replay ratio=0.01（随机抽样，五次独立运行）** | **5/5 COMPLETE** → `codex/coin-replay-random-r001` 分支<br>[SERIES_REPORT.md 汇总报告](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random-r001/docs/experiments/coin_replay_random_r001/SERIES_REPORT.md) ｜ [registry/结果目录](https://github.com/VincentAshton/CoIN/tree/codex/coin-replay-random-r001/docs/experiments/coin_replay_random_r001) |
 | **内部过程记录**（交接/逐日日志/运行手册） | `experiment` 分支的 `docs/internal/`（HANDOFF.md / EXPERIMENT_LOG.md / RUNBOOK.md） |
 
-## 实验状态（2026-09-05）
+## 实验状态（2026-09-10）
 
+**prefix 抽样（按原顺序取前 k）**
 - ratio=0.10：**COMPLETE**（MAA=57.5057，CoIN BWT=+17.2306，final avg=55.7834）
 - ratio=0.01：**COMPLETE**（MAA=60.4406，CoIN BWT=−13.6299，final avg=46.1925）
 - 对比结论（单 seed 描述性证据）：0.01 提高部分中间轮次/新任务表现，但终局旧任务均值
   低 14.04 个百分点、最终平均低 9.59 个百分点——不足以满足终局保持目标，体现
   稳定性—可塑性权衡。详见 results 分支 `docs/experiments/coin_replay/README.md`。
 - 运行代码锁定于 commit `17cfa66`（结果分支与 runtime 分离，代码未变）
+
+**random 抽样（固定 ratio=0.01，仅变 replay 抽样 seed；五次独立运行，2026-09-09~10）**
+- **5/5 COMPLETE**：MAA 61.9287 ± 1.3164、CoIN BWT **+11.3442 ± 5.0428**、
+  final_avg 62.0781 ± 1.4895（mean ± sample sd，n=5）；五次 BWT 全部为正
+  （+6.5542 ~ +16.8100），对照单次 prefix 0.01 的 −13.6299——描述性证据，
+  非同 seed 配对，不构成统计显著性结论
+- 运行代码 commit `16f27d4`；抽样算法 `sha256_task_seed_python_shuffle_v1`；
+  详见 `codex/coin-replay-random-r001` 分支的 `SERIES_REPORT.md`（含局限与审核问题）
 
 ## 复现要点
 

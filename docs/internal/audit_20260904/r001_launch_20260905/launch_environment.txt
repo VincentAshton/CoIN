@@ -1,0 +1,32 @@
+CoIN+Replay ratio=0.01 正式 sweep 启动环境（2026-09-05 ~03:57 CST）
+不含任何密码/token/SSH 凭据。
+
+实例：ebcloud GPU（ssh-cn-huabei1.ebcloud.com:30267，root），cs-66731-55d7d-server
+仓库：/root/data/coin/project @ 069b608（detached；运行代码逐字节 == 17cfa66f009bd1fd1f5d360307f97d4249bf2c5c，
+  git diff 17cfa66 HEAD -- scripts/ ETrain/ coin_lib/ = 0 行验证；工作区干净）
+Conda env：/root/data/coin/conda_envs/coin（python 3.10）
+  torch 2.0.1+cu118 / transformers 4.32.0 / deepspeed 0.14.0 / accelerate 0.21.0 / peft 0.4.0
+env.sh：缓存目录（PIP_CACHE_DIR/XDG_CACHE_HOME/TORCH_EXTENSIONS_DIR/TRITON_CACHE_DIR/
+  CUDA_CACHE_PATH/HF_HOME/TRANSFORMERS_CACHE/TMPDIR 等全部指向 /root/data/coin）+ CUDA_HOME
+  + nvcc/conda PATH + HF_ENDPOINT=hf-mirror
+数据根：/root/data/coin（coinssd 持久卷，647G 可用 ≥600G；系统盘 30G）
+
+正式环境变量：
+  REPLAY_ACCUM=1        （方案 D：replay 段 accum=1 全 ratio/round 统一）
+  ENFORCE_MIN_STEPS=1   （门禁生效）
+  GPUS=0,1,2,3  CUDA_VISIBLE_DEVICES=0,1,2,3
+  PREFLIGHT_ARGS='--layout-map {"ImageNet":"ImageNet_withlabel"}'
+  ALLOW_SINGLE_STEP_REPLAY：未设置（=0）
+  ratio 专属 accumulation：不设置（方案 D 拒绝项）
+
+命令：bash scripts/CoIN_Replay/run_sweep.sh 0.01（唯一；严禁 0.1、严禁双 ratio）
+
+预期（任务书，运行时以 DS engine.global_steps + tensor diff 为权威）：
+  r2 replay N=127 → DS 真步 ~3（gas=1：floor(127/56)=2？以实测为准）
+  r3 replay N=473 → DS 真步 ~9
+  r4 replay N=1771 → DS 真步 ~32
+
+GPU：4×A100-SXM4-80GB 空闲（0 MiB 占用），NVLink 全互联
+启动前检查：pip check OK；无 run_sweep/torchrun/deepspeed/train_mem 残留进程；
+  ratio=0.1 COMPLETE 且只读（metrics MAA=57.5057 BWT=17.2306 已核对）；0.01 正式三目录不存在；
+  dry-run/canary/diagnostic 目录全部在 tmp/ 与 logs/canary_*，与正式路径分离

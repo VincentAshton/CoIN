@@ -1,0 +1,38 @@
+diff --git a/scripts/CoIN_Replay/tools/single_step_summary.py b/scripts/CoIN_Replay/tools/single_step_summary.py
+index 874a792..5002937 100644
+--- a/scripts/CoIN_Replay/tools/single_step_summary.py
++++ b/scripts/CoIN_Replay/tools/single_step_summary.py
+@@ -12,10 +12,11 @@
+ GATE, LDIR = sys.argv[1], sys.argv[2]
+ _HERE = os.path.dirname(os.path.abspath(__file__))
+ sys.path.insert(0, os.path.join(_HERE, ".."))  # scripts/CoIN_Replay/
+-from coin_lib import ckpt_tensor_compare, ckpt_validate  # noqa: E402
++from coin_lib import ckpt_tensor_compare, ckpt_validate, per_rank_micro_batches  # noqa: E402
+ 
++GAS = int(os.environ.get("REPLAY_ACCUM", "16"))  # 2026-09-04 方案 D：1 = 每 micro boundary
+ CKPTS = ["task_sqa", "replay_r2", "replay_r3"]
+-out = {"scenarios": {}, "ckpts": {}}
++out = {"scenarios": {}, "ckpts": {}, "gas": GAS}
+ 
+ 
+ def read_ts(ck):
+@@ -62,8 +63,18 @@ def diff(a, b):
+     s = out["scenarios"][sc]
+     ckpt = "replay_r2" if sc == "r2_N127" else "replay_r3"
+     gs = out["ckpts"][ckpt]["trainer_state"].get("global_step")
++    N = s.get("replay_N")
++    M = per_rank_micro_batches(N, 14, 4)[0] if N else None
++    if GAS == 1:
++        # 方案 D：gas1 下每 micro 即 boundary → HF gs 每 micro +1（无 phantom）= M = DS 真步
++        exp_gs = M
++        note = f"(gas1: DS 真步 = M = {M})"
++    else:
++        # 旧 gas16 No-Go 复现：HF phantom gs=1、DS 0 真步
++        exp_gs = 1
++        note = "(gas16: HF phantom gs=1, DS 0 真步)"
+     checks = [
+-        ("global_step", gs == 1, gs),
++        ("global_step", gs == exp_gs, f"{gs} vs exp {exp_gs} {note}"),
+         ("real_update", s["pass"] is True and (s["changed"] or 0) > 0
+          and (s["l2"] or 0) > 0 and s["hash_a"] != s["hash_b"], s),
+         ("finite", out["ckpts"][ckpt]["all_finite"] is True,

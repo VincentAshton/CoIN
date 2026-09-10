@@ -1,0 +1,11 @@
+正式输出路径（由 run_replay_exp.sh 默认值解析，非记忆；$ROOT=/root/data/coin/project）：
+- RES_ROOT        = $ROOT/results/CoIN_Replay/ratio_0.01        （eval 产物 + coin_metrics.json + run_manifest.json + .complete）
+- CKPT_ROOT       = $ROOT/checkpoints/CoIN_Replay/ratio_0.01    （round<j>_task/replay_llava_lora）
+- REPLAY_DATA_DIR = $ROOT/playground/Replay/ratio_0.01          （round<j>_train.json + manifest）
+- PREFLIGHT_REPORT= $ROOT/results/CoIN_Replay/preflight_report.json
+- 每轮: RES_ROOT/<Task>/round<j>/、RES_ROOT/round<j>_manifest.json、RES_ROOT/.round<j>_done
+- run_manifest    = RES_ROOT/run_manifest.json
+- coin_metrics    = RES_ROOT/coin_metrics.json（.complete 前原子生成）
+启动前确认：ratio_0.01 三个目录均不存在（无旧 .complete/marker）✓
+Canary 目录 /dev/shm/coin_canary、dry-run /root/data/coin/tmp/dryrun_*、diagnostic
+results/diagnostics/ —— 与正式目录完全分离 ✓；ratio=0.1 产物在 ratio_0.1 三目录，本实验只读不碰

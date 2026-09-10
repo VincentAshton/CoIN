@@ -1,0 +1,16 @@
+=== git rev-parse HEAD ===
+d7f9d1c27c5ed9eb42c1a3d2eabebdc48aeb16c8
+=== git log --oneline -5 ===
+d7f9d1c docs+gate: 阶段 II single-step replay 门禁 No-Go 记录 + 复现工具（2026-09-03）
+7e841dd docs: GQA layout-map 实证修正 + 2026-09-03 数据就位/门禁/presweep/分阶段放行记录
+0892bcb tools(imagenet): ImageNet 提取与数据 manifest 生成工具（2026-09-03 公共卷官方 tar 提取使用）
+dd1fe4d docs(HANDOFF): §10.3 修正续接流程——canary 已验收不需重跑，路径为 ImageNet→四任务 preflight→sweep
+7c45394 docs(HANDOFF): 10. 当前进度快照与续接指南（2026-09-02 封存，解除推送约束）
+=== git status --porcelain ===
+=== branch ===
+experiment/coin-replay-presweep-20260903
+=== remotes ===
+origin	https://github.com/VincentAshton/CoIN.git (fetch)
+origin	https://github.com/VincentAshton/CoIN.git (push)
+upstream	https://github.com/zackschen/CoIN.git (fetch)
+upstream	https://github.com/zackschen/CoIN.git (push)

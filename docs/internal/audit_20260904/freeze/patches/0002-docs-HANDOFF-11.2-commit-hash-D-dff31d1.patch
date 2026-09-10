@@ -1,0 +1,32 @@
+From 17cfa66f009bd1fd1f5d360307f97d4249bf2c5c Mon Sep 17 00:00:00 2001
+From: VincentAshton <vincent@example.com>
+Date: Fri, 4 Sep 2026 03:04:38 +0800
+Subject: [PATCH 2/2] =?UTF-8?q?docs:=20HANDOFF=20=C2=A711.2=20=E6=9D=83?=
+ =?UTF-8?q?=E5=A8=81=20commit=20hash=20=E5=9B=9E=E5=A1=AB=EF=BC=88?=
+ =?UTF-8?q?=E6=96=B9=E6=A1=88=20D=20=E9=94=81=E5=AE=9A=20dff31d1=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ HANDOFF.md | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/HANDOFF.md b/HANDOFF.md
+index 875c233..8602926 100644
+--- a/HANDOFF.md
++++ b/HANDOFF.md
+@@ -245,8 +245,8 @@ bash scripts/CoIN_Replay/run_sweep.sh 0.1
+ - **用户否决候选 A**（0.01→1 / 0.1→8 的 ratio 专属 accum = 实验混杂）；批准 **方案 D**：
+   task accum=16 冻结不变；replay accum=1 全 ratio/round 统一（REPLAY_ACCUM=1）；
+   task 有效 batch 896、replay 有效 batch 56（不再声称 replay 896）。
+-- **权威 commit = 8b0a1ac**（experiment/coin-replay-presweep-20260903；本地=GitHub=云端
+-  三端一致，2026-09-04 同步）。相对 d7f9d1c 改动：run_replay_exp.sh（train_one 第 7 参 accum 覆盖、plan/实参
++- **权威 commit = dff31d1**（experiment/coin-replay-presweep-20260903；本地=GitHub=云端
++  三端一致，2026-09-04 同步；本行后若含 docs hash 回填 commit 则三端以 HEAD 为准）。相对 d7f9d1c 改动：run_replay_exp.sh（train_one 第 7 参 accum 覆盖、plan/实参
+   同源、replay 后强制 ckpt-tensor-diff）、coin_lib.py（per_rank_micro_batches、train_plan
+   多口径字段、manifest replay_accum/replay_effective_batch/allow_single_step_replay、
+   manifest-cross-check）、run_sweep.sh（静态禁止 ratio 专属 accum）、single_step_gate.sh +
+-- 
+2.34.1
+

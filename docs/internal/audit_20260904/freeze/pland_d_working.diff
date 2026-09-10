@@ -1,0 +1,583 @@
+diff --git a/scripts/CoIN_Replay/coin_lib.py b/scripts/CoIN_Replay/coin_lib.py
+index b8b05a6..0b49be8 100644
+--- a/scripts/CoIN_Replay/coin_lib.py
++++ b/scripts/CoIN_Replay/coin_lib.py
+@@ -88,6 +88,51 @@ def env_versions():
+ # 训练分辨率报告（工单 8）
+ # ---------------------------------------------------------------------------
+ 
++def per_rank_micro_batches(N: int, batch: int = 14, world: int = 4) -> list:
++    """BatchSamplerShard（accelerate 0.21, split_batches=False, even_batches=True,
++    drop_last=False）下每个 rank 实际 yield 的 micro-batch 数。
++
++    语义来源：DataLoader(batch_size, sampler=LengthGroupedSampler) →
++    accelerator.prepare → BatchSamplerShard._iter_with_no_split。even 补齐不保证
++    rank 均匀（尾部 partial batch 的持有 rank 可能被跳过）→ 常见 ±1 不均
++    （如 N=1272 → [23,23,22,23]）。返回 per-rank yield 计数。
++    2026-09-04 审计移植（audit/matrix_static_sim.py 同逻辑，逐行对照源码）。
++    """
++    if N <= 0:
++        return [0] * world
++    B = -(-N // batch)  # 底层 BatchSampler 产出的 batch 数
++    # batch 长度序列：前 B-1 个满长；最后 = N - batch*(B-1)（整除时也满长）
++    blen = [batch] * (B - 1)
++    blen.append(N - batch * (B - 1) if N % batch else batch)
++
++    counts = []
++    for p in range(world):
++        cnt = 0
++        bty = None  # 本进程最后持有的 batch 长度
++        initial_n = sum(blen[:min(world, B)])  # initial_data 样本数（内容无关，仅数量）
++        for idx, ln in enumerate(blen):
++            if idx % world == p:
++                bty = ln
++            if idx % world == world - 1 and ln == batch:
++                cnt += 1
++                bty = None
++        if initial_n > 0:
++            if bty == batch:
++                cnt += 1  # 尾部 a：满长 bty 补 yield
++            # 尾部回绕补齐（源码 even_batches 分支）：
++            # 源码: for 结束 idx=B-1 → 满长尾: batch=[]; idx+=1 → idx=B（从 B 起补）
++            #       partial 尾: idx 保持 B-1（partial batch 续 initial_data 补满，从 B-1 起补）
++            idx2 = B if blen[-1] == batch else B - 1
++            carry = 0 if blen[-1] == batch else blen[-1]  # 最后 partial batch 长度
++            while idx2 % world != 0 or carry > 0:
++                if idx2 % world == p:
++                    cnt += 1
++                carry = 0
++                idx2 += 1
++        counts.append(cnt)
++    return counts
++
++
+ def train_plan(data_json: str, batch: int, accum: int, world: int, lr: float,
+                warmup_ratio: float, epochs: float, name: str,
+                replay_k: int = None, max_len: int = None) -> dict:
+@@ -96,14 +141,21 @@ def train_plan(data_json: str, batch: int, accum: int, world: int, lr: float,
+     if N == 0:
+         raise ValueError(f"train_plan: {data_json} 为空")
+     total_batch = batch * accum * world
+-    steps_per_epoch = -(-N // total_batch)  # ceil
+-    max_steps = max(1, -(-(epochs * steps_per_epoch) // 1))
++    micro = per_rank_micro_batches(N, batch, world)  # per-rank micro（BatchSamplerShard 语义）
++    m_min, m_max = min(micro), max(micro)
++    # HF 语义（每 rank 独立 len//gas，兜底 1）——rank0 口径
++    hf_steps_per_epoch = max(1, (m_min * epochs) // accum) if epochs >= 1 else 0
++    hf_steps = max(1, -(-(m_max * epochs) // accum))  # 旧 ceil 口径（多 rank 取 max）
++    # DS 权威口径：rank 齐步共同完成的真步数 = floor(min_micro/gas)
++    ds_updates = int((m_min * epochs) // accum)
++    max_steps = hf_steps  # 保留旧语义（门禁 flag 兼容）
+     warmup_steps = int(warmup_ratio * max_steps)
+     if warmup_steps > 0:
+         first_step_lr = lr * (1.0 / warmup_steps)  # 首个更新步的实际 LR（线性 warmup）
+     else:
+         first_step_lr = lr
+     consumed = N * epochs
++    yield_samples = sum(micro) * batch
+     plan = {
+         "name": name,
+         "N": N,
+@@ -112,15 +164,26 @@ def train_plan(data_json: str, batch: int, accum: int, world: int, lr: float,
+         "world_size": world,
+         "grad_accum": accum,
+         "total_train_batch_size": total_batch,
+-        "optimizer_steps": max_steps,
+-        "steps_per_epoch": steps_per_epoch,
++        "effective_batch": total_batch,
++        "optimizer_steps": max_steps,   # 旧字段（HF ceil 口径，保留兼容门禁）
++        "steps_per_epoch": hf_steps_per_epoch,
++        # ---- 2026-09-04 审计新增：准确多口径报告（禁止单一 ceil 掩盖语义）----
++        "per_rank_micro": micro,                         # BatchSamplerShard 实测语义
++        "per_rank_micro_min": m_min,
++        "per_rank_micro_max": m_max,
++        "microbatch_remainder": (m_min * epochs) % accum,  # 尾部未满 accum 的 micro
++        "discarded_or_uncommitted_microbatches": int(
++            (m_min * epochs) - ds_updates * accum + (m_max - m_min) * epochs),
++        "sampler_padding": max(0, yield_samples - N),      # even 补齐重复样本数
++        "hf_planned_steps": max(1, hf_steps_per_epoch),    # HF 计划（rank0/min 口径）
++        "ds_expected_updates": ds_updates,                 # DS 权威真步（rank 齐步下界）
+         "warmup_steps": warmup_steps,
+         "lr": lr,
+         "first_step_lr": round(first_step_lr, 10),
+         "last_step_lr": round(lr, 10),
+         "consumed_samples": int(consumed),
+         "max_len": max_len,
+-        "flag_replay_single_step": max_steps <= 1,
++        "flag_replay_single_step": ds_updates <= 1,   # 改以 DS 真步判 single-step（原 HF ceil 高估）
+         "flag_first_lr_zero": first_step_lr == 0.0,
+         "flag_warmup_covers_all": warmup_steps >= max_steps,
+     }
+@@ -394,7 +457,8 @@ def artifact_check(task: str, stage_dir: str) -> dict:
+     "ratio", "tasks", "T", "model_base", "vision_tower", "projector",
+     "lora_r", "lora_alpha", "lora_dropout", "lr", "mm_projector_lr",
+     "epochs_per_task", "replay_epochs", "seed", "data_seed", "sample_mode",
+-    "per_device_batch", "grad_accum", "world_size", "effective_batch",
++    "per_device_batch", "grad_accum", "replay_accum", "world_size", "effective_batch",
++    "replay_effective_batch", "allow_single_step_replay",
+     "lr_scheduler_type", "warmup_ratio", "precision", "grad_ckpt",
+     "ds_config", "gpus", "model_max_length", "temperature_eval",
+ ]
+@@ -412,6 +476,8 @@ def get(key, default=None, cast=None, required=False):
+     world = len(str(get("GPUS", "0,1,2,3")).split(","))
+     batch = int(get("BATCH", "14", required=True))
+     accum = int(get("ACCUM", "16", required=True))
++    replay_accum_raw = get("REPLAY_ACCUM")  # 空=未设置（replay 段继承 task accum）
++    replay_accum = int(replay_accum_raw) if replay_accum_raw else None
+     cfg = {
+         "ratio": float(get("RATIO", required=True)),
+         "tasks": json.loads(get("TASKS_JSON", '["ScienceQA","TextVQA","ImageNet","GQA"]')),
+@@ -430,8 +496,11 @@ def get(key, default=None, cast=None, required=False):
+         "sample_mode": get("SAMPLE_MODE", "prefix"),
+         "per_device_batch": batch,
+         "grad_accum": accum,
++        "replay_accum": replay_accum,
+         "world_size": world,
+         "effective_batch": batch * accum * world,
++        "replay_effective_batch": (batch * world * replay_accum) if replay_accum else None,
++        "allow_single_step_replay": int(get("ALLOW_SINGLE_STEP_REPLAY", "0")),
+         "lr_scheduler_type": get("LR_SCHEDULER_TYPE", "cosine"),
+         "warmup_ratio": float(get("WARMUP_RATIO", "0.03")),
+         "precision": get("PRECISION", "bf16+tf32"),
+@@ -526,6 +595,47 @@ def round_manifest_write(res_root: str, j: int, info: dict) -> str:
+     return path
+ 
+ 
++# ---------------------------------------------------------------------------
++# cross-run manifest 校验（方案 D：0.1 与 0.01 除 ratio 外完全一致）
++# ---------------------------------------------------------------------------
++
++CROSS_ALLOWED_DIFF = {"ratio"}  # 唯一允许的 run_manifest config 差异字段
++
++
++def manifest_cross_check(res_a: str, res_b: str) -> dict:
++    """比较两个结果目录的 run_manifest.json config。断言：除 ratio（与派生输出路径）
++    外所有 CONFIG_FIELDS 完全一致——即 0.1/0.01 的 replay_accum、batch、LR、
++    scheduler、seed、模型、数据、代码 hash 相同。"""
++    def load(p):
++        path = os.path.join(p, "run_manifest.json")
++        if not os.path.isfile(path):
++            raise ValueError(f"缺 run_manifest.json: {path}")
++        return json_load(path)
++
++    ma, mb = load(res_a), load(res_b)
++    ca, cb = ma["config"], mb["config"]
++    diffs = {}
++    for k in CONFIG_FIELDS:
++        if k in CROSS_ALLOWED_DIFF:
++            continue
++        if ca.get(k) != cb.get(k):
++            diffs[k] = {"a": ca.get(k), "b": cb.get(k)}
++    common = set(ca) & set(cb)
++    only_a = set(ca) - set(cb)
++    only_b = set(cb) - set(ca)
++    return {
++        "pass": not diffs and not only_a and not only_b,
++        "diffs": diffs,
++        "config_keys_only_a": sorted(only_a),
++        "config_keys_only_b": sorted(only_b),
++        "ratio_a": ca.get("ratio"), "ratio_b": cb.get("ratio"),
++        "replay_accum_a": ca.get("replay_accum"), "replay_accum_b": cb.get("replay_accum"),
++        "replay_effective_batch_a": ca.get("replay_effective_batch"),
++        "replay_effective_batch_b": cb.get("replay_effective_batch"),
++        "config_hash_a": ma.get("config_hash"), "config_hash_b": mb.get("config_hash"),
++    }
++
++
+ # ---------------------------------------------------------------------------
+ # CLI 入口
+ # ---------------------------------------------------------------------------
+@@ -588,6 +698,11 @@ def main():
+         a = _kv(sys.argv[2:])
+         info = json.loads(a["--info-json"])
+         print(json.dumps({"path": round_manifest_write(a["--res-root"], int(a["--round"]), info)}))
++    elif cmd == "manifest-cross-check":
++        a = _kv(sys.argv[2:])
++        rep = manifest_cross_check(a["--res-root-a"], a["--res-root-b"])
++        print(json.dumps(rep, ensure_ascii=False))
++        sys.exit(0 if rep["pass"] else 1)
+     else:
+         raise SystemExit(f"未知命令: {cmd}")
+ 
+diff --git a/scripts/CoIN_Replay/run_replay_exp.sh b/scripts/CoIN_Replay/run_replay_exp.sh
+index d1b34f6..549a080 100755
+--- a/scripts/CoIN_Replay/run_replay_exp.sh
++++ b/scripts/CoIN_Replay/run_replay_exp.sh
+@@ -53,6 +53,10 @@ export TASKS_JSON="${TASKS_JSON:-[\"ScienceQA\",\"TextVQA\",\"ImageNet\",\"GQA\"
+ export MASTER_PORT="${MASTER_PORT:-29600}"
+ export ENFORCE_MIN_STEPS="${ENFORCE_MIN_STEPS:-0}"
+ export ALLOW_SINGLE_STEP_REPLAY="${ALLOW_SINGLE_STEP_REPLAY:-0}"
++# 方案 D（2026-09-04 批准设计）：replay 段 gradient_accumulation 覆盖值。
++# 所有 ratio / round 必须用同一值（正式 sweep 要求显式 export REPLAY_ACCUM=1）。
++# 空 = 不覆盖（replay 段继承 ACCUM=16，旧语义；兼容测试/回退路径，正式跑禁止留空）。
++export REPLAY_ACCUM="${REPLAY_ACCUM:-}"
+ export DRY_RUN="${DRY_RUN:-0}"
+ export PREFLIGHT_ARGS="${PREFLIGHT_ARGS:-}"
+ 
+@@ -171,23 +175,26 @@ write_manifest() {
+ }
+ 
+ # ---- 训练（工单 3/8）-------------------------------------------------------
+-train_one() {  # $1=name $2=data_path $3=ckpt $4=prev(可空) $5=epochs $6=replay_k(可空)
++train_one() {  # $1=name $2=data_path $3=ckpt $4=prev(可空) $5=epochs $6=replay_k(可空) $7=accum_override(可空)
+   local name="$1" data="$2" ckpt="$3" prev="$4" epochs="$5" replay_k="${6:-}"
++  # 方案 D：replay 段经第 7 参覆盖 accum（task 段不传 → 恒 $ACCUM=16）；空串回退 $ACCUM
++  local accum="${7:-$ACCUM}"
+   local logf="$RES_ROOT/logs/${name}.log"
+-  # 训练分辨率报告（工单 8）
++  # 训练分辨率报告（工单 8；accum 用覆盖后值，plan 与实参同源防错位）
+   local plan
+-  plan=$(py train-plan --data-json "$data" --batch "$BATCH" --accum "$ACCUM" \
++  plan=$(py train-plan --data-json "$data" --batch "$BATCH" --accum "$accum" \
+          --world "$WORLD" --lr "$LR" --warmup-ratio "$WARMUP_RATIO" \
+          --epochs "$epochs" --name "$name" ${replay_k:+--replay-k "$replay_k"})
+   echo "==== 训练分辨率报告 [$name] ===="
+   echo "$plan" | python3 -m json.tool
++  echo "$plan" > "$RES_ROOT/logs/${name}.plan.json"   # 留痕（round manifest 引用）
+   if [[ "$ENFORCE_MIN_STEPS" == "1" ]]; then
+     local flags
+-    flags=$(echo "$plan" | python3 -c "import json,sys; p=json.load(sys.stdin); print(p['flag_replay_single_step'], p['flag_first_lr_zero'], p['flag_warmup_covers_all'])")
++    flags=$(echo "$plan" | python3 -c "import json,sys; p=json.load(sys.stdin); print(p['flag_replay_single_step'], p['flag_first_lr_zero'], p['flag_warmup_covers_all'])" 2>/dev/null || echo "True False False")
+     read -r f1 f2 f3 <<< "$flags"
+     if [[ "$f1" == "True" || "$f2" == "True" || "$f3" == "True" ]]; then
+       if [[ "$ALLOW_SINGLE_STEP_REPLAY" != "1" ]]; then
+-        die "ENFORCE_MIN_STEPS=1 且训练计划异常（single_step=$f1 first_lr_zero=$f2 warmup_covers_all=$f3）。如需强制继续请显式 ALLOW_SINGLE_STEP_REPLAY=1"
++        die "ENFORCE_MIN_STEPS=1 且训练计划异常（ds_single_step=$f1 first_lr_zero=$f2 warmup_covers_all=$f3）。如需强制继续请显式 ALLOW_SINGLE_STEP_REPLAY=1"
+       fi
+       log "WARN: 训练计划异常但 ALLOW_SINGLE_STEP_REPLAY=1，继续"
+     fi
+@@ -211,7 +218,7 @@ train_one() {  # $1=name $2=data_path $3=ckpt $4=prev(可空) $5=epochs $6=repla
+     --num_train_epochs "$epochs"
+     --per_device_train_batch_size "$BATCH"
+     --per_device_eval_batch_size 16
+-    --gradient_accumulation_steps "$ACCUM"
++    --gradient_accumulation_steps "$accum"
+     --evaluation_strategy no --save_strategy epoch
+     --learning_rate "$LR" --weight_decay 0. --warmup_ratio "$WARMUP_RATIO"
+     --lr_scheduler_type "$LR_SCHEDULER_TYPE" --logging_steps 1
+@@ -330,16 +337,18 @@ run_round() {
+       --out "$replay_json" "${nested_args[@]}"
+     local k
+     k=$(python3 -c "import json; m=json.load(open('$replay_json.manifest.json')); print(m['output']['N'])")
+-    train_one "round${j}_replay" "$replay_json" "$replay_ckpt" "$task_ckpt" "$REPLAY_EPOCHS" "$k"
+-    # 断言 task hash != replay hash（replay 后参数确实变化）——工单 4 canary 证明
+-    local h_task h_replay
+-    h_task=$(py ckpt-validate "$task_ckpt" | python3 -c "import json,sys; print(json.load(sys.stdin).get('param_hash') or '')")
+-    h_replay=$(py ckpt-validate "$replay_ckpt" | python3 -c "import json,sys; print(json.load(sys.stdin).get('param_hash') or '')")
+-    if [[ -n "$h_task" && -n "$h_replay" ]]; then
+-      [[ "$h_task" != "$h_replay" ]] || die "task checkpoint 与 replay checkpoint 参数 hash 相同（replay 未生效？）"
+-      log "task hash != replay hash 断言通过"
++    # 方案 D：replay 段 accum = REPLAY_ACCUM（正式跑=1；task 段不受影响恒 16）
++    train_one "round${j}_replay" "$replay_json" "$replay_ckpt" "$task_ckpt" "$REPLAY_EPOCHS" "$k" "${REPLAY_ACCUM:-}"
++    # 断言 replay 真实更新（评审 C-1/C-3 铁证，2026-09-04 方案 D 强化）：
++    # 非 DRY_RUN 下走 ckpt-tensor-diff（changed≥1 + 规范化 hash 不同 + 全 finite），
++    # 替代弱 param_hash 比较（bf16 无 torch 时可能静默跳过——禁止）
++    if [[ "$DRY_RUN" == "1" ]]; then
++      log "DRY_RUN：跳过 tensor-diff 强化断言（假 checkpoint 无真实训练语义）"
+     else
+-      log "param_hash 不可用（无 torch），跳过 task!=replay 参数断言"
++      if ! py ckpt-tensor-diff "$task_ckpt" "$replay_ckpt"; then
++        die "replay 未产生真实参数更新（ckpt-tensor-diff 失败）：task=$task_ckpt replay=$replay_ckpt"
++      fi
++      log "ckpt-tensor-diff 通过：replay 真实更新已确认（changed>0 + hash≠ + finite）"
+     fi
+     eval_ckpt="$replay_ckpt"
+   fi
+@@ -352,8 +361,13 @@ run_round() {
+   # round manifest（原子）+ 轮次标记
+   local ckrep
+   ckrep=$(py ckpt-validate "$eval_ckpt")
++  # 方案 D：round manifest 并入 replay 段 train-plan（per-rank micro/HF/DS 步数/LR 摘要）
++  local rp_plan="{}"
++  if [[ -f "$RES_ROOT/logs/round${j}_replay.plan.json" ]]; then
++    rp_plan=$(cat "$RES_ROOT/logs/round${j}_replay.plan.json")
++  fi
+   py round-manifest-write --res-root "$RES_ROOT" --round "$j" --info-json \
+-    "$(python3 -c "import json,sys; print(json.dumps({'task': '$task', 'eval_ckpt': '$eval_ckpt', 'task_ckpt': '$task_ckpt', 'replay_ckpt': '$replay_ckpt', 'replay_data': '$replay_json', 'ckpt': json.loads(sys.argv[1])}))" "$ckrep")" >/dev/null
++    "$(python3 -c "import json,sys; print(json.dumps({'task': '$task', 'eval_ckpt': '$eval_ckpt', 'task_ckpt': '$task_ckpt', 'replay_ckpt': '$replay_ckpt', 'replay_data': '$replay_json', 'ckpt': json.loads(sys.argv[1]), 'replay_plan': json.loads(sys.argv[2])}))" "$ckrep" "$rp_plan")" >/dev/null
+   touch "$marker"
+   log "round$j 完成（round${j}_manifest.json + .round${j}_done）"
+ }
+diff --git a/scripts/CoIN_Replay/run_sweep.sh b/scripts/CoIN_Replay/run_sweep.sh
+index 7e6fbc1..b1d29ea 100755
+--- a/scripts/CoIN_Replay/run_sweep.sh
++++ b/scripts/CoIN_Replay/run_sweep.sh
+@@ -3,6 +3,10 @@
+ # 用法:
+ #   bash scripts/CoIN_Replay/run_sweep.sh            # 跑 0.1 0.01
+ #   bash scripts/CoIN_Replay/run_sweep.sh 0.1 0.01
++# 方案 D（2026-09-04）：REPLAY_ACCUM 必须由调用方在外部显式 export（正式值=1），
++# 本脚本【禁止】按 ratio 隐式设置不同 REPLAY_ACCUM（ratio 专属 accum 已被评审拒绝，
++# 会造成实验混杂）。run_sweep 也不得覆盖已 export 的 REPLAY_ACCUM。
++#   export REPLAY_ACCUM=1 && bash scripts/CoIN_Replay/run_sweep.sh 0.1
+ set -euo pipefail
+ 
+ RATIOS=("$@")
+diff --git a/scripts/CoIN_Replay/tests/test_coin_lib.py b/scripts/CoIN_Replay/tests/test_coin_lib.py
+index 413af28..c30c8c8 100644
+--- a/scripts/CoIN_Replay/tests/test_coin_lib.py
++++ b/scripts/CoIN_Replay/tests/test_coin_lib.py
+@@ -34,10 +34,18 @@ def test_plan_with_data(self):
+             json.dump([{"id": i} for i in range(1000)], open(p, "w"))
+             plan = coin_lib.train_plan(p, 14, 16, 4, 2e-4, 0.03, 1, "t", replay_k=120)
+             self.assertEqual(plan["N"], 1000)
+-            self.assertEqual(plan["optimizer_steps"], 2)
++            self.assertEqual(plan["optimizer_steps"], 2)   # 旧 ceil 口径（兼容）
++            self.assertEqual(plan["ds_expected_updates"], 1)  # DS 权威（18 micro //16）
+             self.assertEqual(plan["replay_k"], 120)
+             self.assertEqual(plan["consumed_samples"], 1000)
+-            self.assertFalse(plan["flag_replay_single_step"])
++            # 2026-09-04 语义变更：flag 以 DS 真步判（≤1 拦截，评审 C-1 ≥2 real steps）
++            self.assertTrue(plan["flag_replay_single_step"])
++            # task 大段（真步≥2）不拦截
++            pbig = os.path.join(tmp, "big.json")
++            json.dump([{"id": i} for i in range(12726)], open(pbig, "w"))
++            big = coin_lib.train_plan(pbig, 14, 16, 4, 2e-4, 0.03, 1, "t")
++            self.assertFalse(big["flag_replay_single_step"])
++            self.assertEqual(big["ds_expected_updates"], 14)
+ 
+     def test_single_step_flag(self):
+         with tempfile.TemporaryDirectory() as tmp:
+@@ -238,5 +246,193 @@ def test_out_of_range(self):
+             coin_lib.artifact_check("GQA", d)
+ 
+ 
++class TestPlanAudit20260904(unittest.TestCase):
++    """2026-09-04 方案 D 审计：train_plan 多口径字段（任务书六 4/5/6）。"""
++
++    def _plan(self, n, accum, batch=14, world=4):
++        with tempfile.TemporaryDirectory() as tmp:
++            p = os.path.join(tmp, "d.json")
++            json.dump([{"id": i} for i in range(n)], open(p, "w"))
++            return coin_lib.train_plan(p, batch, accum, world, 2e-4, 0.03, 1, "replay")
++
++    def test_replay_gas1_expected_updates(self):
++        # 任务书六.4：N=127/473 gas1 真步 ≈3/9（DS 权威口径 = M//gas，M 均匀）
++        self.assertEqual(self._plan(127, 1)["ds_expected_updates"], 3)
++        self.assertEqual(self._plan(473, 1)["ds_expected_updates"], 9)
++
++    def test_replay_010_gas1_expected_updates(self):
++        # 任务书六.5：0.1 计划 ≈23/85/317
++        self.assertEqual(self._plan(1272, 1)["ds_expected_updates"], 23)
++        self.assertEqual(self._plan(4732, 1)["ds_expected_updates"], 85)
++        self.assertEqual(self._plan(17715, 1)["ds_expected_updates"], 317)
++
++    def test_gas16_nogo_scenarios_zero_updates(self):
++        # 阶段 II No-Go 复现：N=127/473 gas16 → 0 真步；flag 拦截（ds 口径）
++        for n in (127, 473):
++            p = self._plan(n, 16)
++            self.assertEqual(p["ds_expected_updates"], 0)
++            self.assertTrue(p["flag_replay_single_step"])  # 门禁以 DS 真步判（≤1 拦截）
++
++    def test_hf_vs_ds_fields(self):
++        # 任务书六.6：HF/DS/remainder/discarded/sampler_padding 字段正确
++        p = self._plan(127, 16)   # M=3/rank
++        self.assertEqual(p["per_rank_micro"], [3, 3, 3, 3])
++        self.assertEqual(p["hf_planned_steps"], 1)          # HF phantom
++        self.assertEqual(p["ds_expected_updates"], 0)       # DS 权威
++        self.assertEqual(p["microbatch_remainder"], 3)
++        self.assertEqual(p["discarded_or_uncommitted_microbatches"], 3)
++        # sampler_padding: Σmicro×batch − N = 12×14−127=41? M=3 → 每 rank 3×14=42 样本 → 4×42=168 → pad=41
++        self.assertEqual(p["sampler_padding"], 168 - 127)
++        p2 = self._plan(1272, 16)  # M=23
++        self.assertEqual(p2["per_rank_micro"], [23, 23, 23, 23])
++        self.assertEqual(p2["ds_expected_updates"], 1)
++        self.assertEqual(p2["microbatch_remainder"], 7)
++        self.assertEqual(p2["discarded_or_uncommitted_microbatches"], 7)
++        # effective_batch 语义
++        self.assertEqual(p2["effective_batch"], 896)
++        self.assertEqual(self._plan(127, 1)["effective_batch"], 56)
++
++    def test_old_fields_compat(self):
++        # 旧字段保留（门禁/上游调用兼容）
++        p = self._plan(1000, 16)
++        self.assertEqual(p["optimizer_steps"], 2)   # 旧 ceil 口径
++        self.assertEqual(p["ds_expected_updates"], 1)  # 真实 62//16=3? M(1000)=18→18//16=1
++        p2 = self._plan(896, 16)
++        self.assertEqual(p2["optimizer_steps"], 1)
++        self.assertEqual(p2["ds_expected_updates"], 1)
++
++
++class TestReplayAccumConfig(unittest.TestCase):
++    """2026-09-04 方案 D：REPLAY_ACCUM 配置与 manifest（任务书六 2/3/9/10/14）。"""
++
++    BASE = {
++        "RATIO": "0.1", "BASE_MODEL": "/b", "VISION_TOWER": "/v", "PROJECTOR": "/p",
++        "DS_CONFIG": "/ds.json", "GPUS": "0,1,2,3", "BATCH": "14", "ACCUM": "16",
++        "LR": "2e-4", "MM_PROJECTOR_LR": "2e-5",
++        "TASKS_JSON": '["ScienceQA","TextVQA","ImageNet","GQA"]',
++        "SEED": "1234", "DATA_SEED": "1234", "LORA_R": "192", "LORA_ALPHA": "256",
++        "EPOCHS": "1", "REPLAY_EPOCHS": "1", "SAMPLE_MODE": "prefix",
++        "WARMUP_RATIO": "0.03", "LR_SCHEDULER_TYPE": "cosine",
++        "MODEL_MAX_LENGTH": "2048", "EVAL_TEMPERATURE": "0",
++        "PRECISION": "bf16+tf32", "GRAD_CKPT": "true", "REPLAY_ACCUM": "1",
++    }
++
++    def test_task_accum16_replay_accum1(self):
++        # 任务书六.2/3：manifest 记录 task_accum=16、replay_accum=1、两有效 batch
++        cfg = coin_lib.compute_config(self.BASE)
++        self.assertEqual(cfg["grad_accum"], 16)
++        self.assertEqual(cfg["replay_accum"], 1)
++        self.assertEqual(cfg["effective_batch"], 896)
++        self.assertEqual(cfg["replay_effective_batch"], 56)
++
++    def test_ratio_does_not_affect_replay_accum(self):
++        # 任务书六.9：ratio 不得影响 replay_accum
++        a = coin_lib.compute_config(dict(self.BASE, RATIO="0.1"))
++        b = coin_lib.compute_config(dict(self.BASE, RATIO="0.01"))
++        self.assertEqual(a["replay_accum"], b["replay_accum"])
++        self.assertEqual(a["replay_effective_batch"], b["replay_effective_batch"])
++        self.assertEqual(a["effective_batch"], b["effective_batch"])
++        self.assertNotEqual(a["ratio"], b["ratio"])
++
++    def test_unset_replay_accum_is_null(self):
++        env = {k: v for k, v in self.BASE.items() if k != "REPLAY_ACCUM"}
++        cfg = coin_lib.compute_config(env)
++        self.assertIsNone(cfg["replay_accum"])
++        self.assertIsNone(cfg["replay_effective_batch"])
++
++    def test_resume_rejects_different_replay_accum(self):
++        # 任务书六.10/14：旧 manifest（replay_accum 不同）不得被新配置恢复运行复用
++        tmp = tempfile.mkdtemp(prefix="coin_ra_")
++        try:
++            res = os.path.join(tmp, "res")
++            os.makedirs(res)
++            env16 = dict(self.BASE, REPLAY_ACCUM="16")
++            cfg16 = coin_lib.compute_config(env16)
++            coin_lib.manifest_write(res, cfg16, root=tmp)
++            # 换 REPLAY_ACCUM=1 恢复 → 拒绝
++            cfg1 = coin_lib.compute_config(self.BASE)
++            self.assertNotEqual(coin_lib.config_hash(cfg1), coin_lib.config_hash(cfg16))
++            with self.assertRaises(ValueError):
++                coin_lib.manifest_write(res, cfg1, root=tmp, resume_ok=True)
++        finally:
++            shutil.rmtree(tmp, ignore_errors=True)
++
++    def test_allow_single_step_recorded(self):
++        cfg = coin_lib.compute_config(self.BASE)
++        self.assertEqual(cfg["allow_single_step_replay"], 0)
++        cfg2 = coin_lib.compute_config(dict(self.BASE, ALLOW_SINGLE_STEP_REPLAY="1"))
++        self.assertEqual(cfg2["allow_single_step_replay"], 1)
++
++
++class TestCrossManifest(unittest.TestCase):
++    """任务书六.11：cross-run manifest 校验（0.1 vs 0.01 除 ratio 外一致）。"""
++
++    BASE = {
++        "RATIO": "0.1", "BASE_MODEL": "/b", "VISION_TOWER": "/v", "PROJECTOR": "/p",
++        "DS_CONFIG": "/ds.json", "GPUS": "0,1,2,3", "BATCH": "14", "ACCUM": "16",
++        "REPLAY_ACCUM": "1", "LR": "2e-4", "MM_PROJECTOR_LR": "2e-5",
++        "TASKS_JSON": '["ScienceQA","TextVQA","ImageNet","GQA"]',
++        "SEED": "1234", "DATA_SEED": "1234", "LORA_R": "192", "LORA_ALPHA": "256",
++        "EPOCHS": "1", "REPLAY_EPOCHS": "1", "SAMPLE_MODE": "prefix",
++        "WARMUP_RATIO": "0.03", "LR_SCHEDULER_TYPE": "cosine",
++        "MODEL_MAX_LENGTH": "2048", "EVAL_TEMPERATURE": "0",
++        "PRECISION": "bf16+tf32", "GRAD_CKPT": "true",
++    }
++
++    def _mk(self, ratio, replay_accum="1", lr="2e-4"):
++        tmp = tempfile.mkdtemp(prefix="coin_cross_")
++        res = os.path.join(tmp, "res")
++        os.makedirs(res)
++        env = dict(self.BASE, RATIO=ratio, REPLAY_ACCUM=replay_accum, LR=lr)
++        coin_lib.manifest_write(res, coin_lib.compute_config(env), root=tmp)
++        return res
++
++    def test_pass_same_replay_accum(self):
++        a = self._mk("0.1")
++        b = self._mk("0.01")
++        rep = coin_lib.manifest_cross_check(a, b)
++        self.assertTrue(rep["pass"], rep)
++        self.assertEqual(rep["replay_accum_a"], rep["replay_accum_b"])
++
++    def test_fail_different_replay_accum(self):
++        a = self._mk("0.1", replay_accum="1")
++        b = self._mk("0.01", replay_accum="16")
++        rep = coin_lib.manifest_cross_check(a, b)
++        self.assertFalse(rep["pass"])
++        self.assertIn("replay_accum", rep["diffs"])
++        self.assertIn("replay_effective_batch", rep["diffs"])
++
++    def test_fail_other_config_diff(self):
++        a = self._mk("0.1")
++        b = self._mk("0.01", lr="3e-4")
++        rep = coin_lib.manifest_cross_check(a, b)
++        self.assertFalse(rep["pass"])
++        self.assertIn("lr", rep["diffs"])
++
++
++class TestShellGuards(unittest.TestCase):
++    """任务书六.1/12/13：shell 层防隐式覆盖与输出隔离（静态断言，防回归）。"""
++
++    ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
++
++    def test_run_sweep_never_sets_replay_accum(self):
++        # 任务书六.1/12：run_sweep 不得按 ratio 隐式设置 REPLAY_ACCUM
++        text = open(os.path.join(self.ROOT, "scripts/CoIN_Replay/run_sweep.sh")).read()
++        exec_lines = [l for l in text.splitlines()
++                      if "REPLAY_ACCUM" in l and not l.strip().startswith("#")]
++        self.assertEqual(exec_lines, [])
++
++    def test_run_replay_exp_output_roots_isolatable(self):
++        # 任务书六.13：正式输出与 Canary 输出隔离（CKPT_ROOT/RES_ROOT/REPLAY_DATA_DIR 可 env 覆盖）
++        text = open(os.path.join(self.ROOT, "scripts/CoIN_Replay/run_replay_exp.sh")).read()
++        for var in ("CKPT_ROOT", "RES_ROOT", "REPLAY_DATA_DIR"):
++            self.assertIn(f'{var}="${{{var}:-', text)
++
++    def test_train_one_accepts_accum_override(self):
++        text = open(os.path.join(self.ROOT, "scripts/CoIN_Replay/run_replay_exp.sh")).read()
++        self.assertIn('local accum="${7:-$ACCUM}"', text)
++        self.assertIn('--gradient_accumulation_steps "$accum"', text)
++
++
+ if __name__ == "__main__":
+     unittest.main(verbosity=2)
+diff --git a/scripts/CoIN_Replay/tools/single_step_gate.sh b/scripts/CoIN_Replay/tools/single_step_gate.sh
+index 8d58fb4..3baf265 100644
+--- a/scripts/CoIN_Replay/tools/single_step_gate.sh
++++ b/scripts/CoIN_Replay/tools/single_step_gate.sh
+@@ -5,14 +5,17 @@
+ # grad_ckpt / seed1234 / max_len 2048）。
+ # 用法（coin env 内，从仓库根）:
+ #   bash scripts/CoIN_Replay/tools/single_step_gate.sh <gate_dir> <log_dir>
++# 环境变量: REPLAY_ACCUM（默认 16；方案 D 验证用 REPLAY_ACCUM=1）
+ # 2026-09-03 实测结论：N<896（1 有效 batch）时 DS engine（accum16 "auto"）0 次真实更新，
+ # HF global_step=1 为假象——见 EXPERIMENT_LOG 4.15 / SINGLE_STEP_GATE_REPORT。
++# 2026-09-04 方案 D：REPLAY_ACCUM=1 时每 micro 即 boundary，无 0 真步场景。
+ set -uo pipefail
+ 
+ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ GATE="${1:-/root/data/coin/tmp/single_step_gate}"
+ LDIR="${2:-/root/data/coin/logs/presweep/single_step_replay}"
++REPLAY_ACCUM="${REPLAY_ACCUM:-16}"   # 方案 D 验证用 1
+ PY="$(command -v python3)"
+ DS="$(command -v deepspeed)"
+ COIN="$PY $ROOT/scripts/CoIN_Replay/coin_lib.py"
+@@ -33,8 +36,8 @@ echo "--- build replay r3 (N=473 期望) ---"
+ 
+ for spec in "r2:$GATE/data/r2.json" "r3:$GATE/data/r3.json"; do
+   n="${spec%%:*}"; j="${spec#*:}"
+-  echo "--- plan $n ---"
+-  $COIN train-plan --data-json "$j" --batch 14 --accum 16 --world 4 --lr 2e-4 \
++  echo "--- plan $n (accum=$REPLAY_ACCUM) ---"
++  $COIN train-plan --data-json "$j" --batch 14 --accum "$REPLAY_ACCUM" --world 4 --lr 2e-4 \
+     --warmup-ratio 0.03 --epochs 1 --name "replay_$n" | "$PY" -m json.tool
+ done
+ 
+@@ -52,7 +55,6 @@ TRAIN_ARGS=(
+   --image_aspect_ratio pad --group_by_modality_length True
+   --bf16 True --tf32 True
+   --per_device_train_batch_size 14 --per_device_eval_batch_size 16
+-  --gradient_accumulation_steps 16
+   --evaluation_strategy no --save_strategy epoch
+   --num_train_epochs 1
+   --learning_rate 2e-4 --weight_decay 0. --warmup_ratio 0.03
+@@ -62,6 +64,7 @@ TRAIN_ARGS=(
+   --gradient_checkpointing True
+   --dataloader_num_workers 4 --lazy_preprocess True
+   --report_to none
++  --gradient_accumulation_steps "$REPLAY_ACCUM"
+ )
+ 
+ train() {  # name data out [prev]

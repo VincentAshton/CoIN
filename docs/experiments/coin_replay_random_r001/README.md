@@ -93,6 +93,10 @@ playground/  Replay_random/r001/<run_id>/        round{2..4}_train.json(+.manife
 started_at/completed_at/result_directory/code_commit/config_hash/error_summary/
 registration_commit/result_commit 全字段 + prefix 基线数值。）
 
+**📄 五轮汇总报告（5/5 完成，待审核）：[SERIES_REPORT.md](SERIES_REPORT.md)**
+—— 目的/设计/抽样算法/执行纪律/五轮 A 矩阵与全精度指标/统计/相对基线差值/工程事件与恢复/
+证据索引/局限/提交审核问题清单（2026-09-10）；系列累计 **5 个 COMPLETE 已达成，按规则停止**。
+
 ## 对照基线（prefix 系列，results/coin-replay-r010-20260904 分支）
 
 | 基线 | MAA | CoIN BWT | final avg |

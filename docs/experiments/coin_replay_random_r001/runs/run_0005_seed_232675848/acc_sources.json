@@ -1,0 +1,75 @@
+{
+  "ratio": 0.01,
+  "units": [
+    {
+      "task": "ScienceQA",
+      "round": 1,
+      "accuracy": 72.97807120962038,
+      "correct": 3095,
+      "count": 4241
+    },
+    {
+      "task": "ScienceQA",
+      "round": 2,
+      "accuracy": 67.31902853100684,
+      "correct": 2855,
+      "count": 4241
+    },
+    {
+      "task": "TextVQA",
+      "round": 2,
+      "accuracy": 53.29,
+      "correct": null,
+      "count": null
+    },
+    {
+      "task": "ScienceQA",
+      "round": 3,
+      "accuracy": 70.38434331525583,
+      "correct": 2985,
+      "count": 4241
+    },
+    {
+      "task": "TextVQA",
+      "round": 3,
+      "accuracy": 46.49,
+      "correct": null,
+      "count": null
+    },
+    {
+      "task": "ImageNet",
+      "round": 3,
+      "accuracy": 19.5,
+      "correct": null,
+      "count": null
+    },
+    {
+      "task": "ScienceQA",
+      "round": 4,
+      "accuracy": 69.15821740155623,
+      "correct": 2933,
+      "count": 4241
+    },
+    {
+      "task": "TextVQA",
+      "round": 4,
+      "accuracy": 50.42,
+      "correct": null,
+      "count": null
+    },
+    {
+      "task": "ImageNet",
+      "round": 4,
+      "accuracy": 93.43,
+      "correct": null,
+      "count": null
+    },
+    {
+      "task": "GQA",
+      "round": 4,
+      "accuracy": 39.39,
+      "correct": null,
+      "count": null
+    }
+  ]
+}

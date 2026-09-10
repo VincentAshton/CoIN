@@ -1,13 +1,16 @@
-"""random_replay_finalize.py assemble 测试（2026-09-08 审计加固，零 GPU --test-mode）。
+"""random_replay_finalize.py assemble 测试（零 GPU --test-mode；ratio 通用）。
 
 fixture = 完整 fake run：4 任务合成 train/问题文件、真实 build_replay_data 生成的
 random sidecar（round2..4）、10 个 eval 单元产物、真实 aggregate_coin.py 生成的
 coin_metrics.json、7 个假 checkpoint 目录、run_manifest.json。
 
 覆盖：
-  - 成功路径：全部 PASS → staging 原子换入 out，六文件齐全，staging 无残留
+  - 成功路径（ratio=0.01/r001 与 ratio=0.10/r010）：全部 PASS → staging 原子换入 out，
+    六文件齐全，staging 无残留
+  - expected ratio 非法 / 与 manifest 不符 → 非零，既有 out 分毫不动
   - 错误 seed / 错误路径 / 篡改源数据 SHA / 已有 out（无 --force）/ 敏感泄漏 → 非零，
     既有 out 分毫不动
+  - fill-delta：prefix 基线差值 + 同 seed 跨 ratio 配对差值（方向 = 高 ratio − 低 ratio）
 """
 import hashlib
 import json
@@ -26,13 +29,14 @@ from helpers import ROOT, build_synthetic
 SEED = 20260908
 RID = "run_0001_seed_20260908"
 TASKS = ["ScienceQA", "TextVQA", "ImageNet", "GQA"]
-N = 140  # floor(140*0.01)=1 >= 1
+N = 140  # floor(140*0.01)=1 >= 1；floor(140*0.1)=14
 
 TOOLS_DIR = os.path.join(ROOT, "scripts", "CoIN_Replay", "tools")
 sys.path.insert(0, TOOLS_DIR)
 sys.path.insert(0, os.path.join(ROOT, "scripts", "CoIN_Replay"))
 import random_replay_finalize as F  # noqa: E402
 from build_replay_data import SAMPLING_ALGORITHM  # noqa: E402
+from coin_lib import ratio_tag  # noqa: E402
 
 AGG = os.path.join(ROOT, "scripts", "CoIN_Replay", "aggregate_coin.py")
 BUILD = os.path.join(ROOT, "scripts", "CoIN_Replay", "build_replay_data.py")
@@ -41,21 +45,23 @@ PUB6 = ["coin_metrics.json", "acc_sources.json", "run_manifest.sanitized.json",
 
 
 class FinalizeFixture:
-    """构建一个完整 fake random run 目录树。"""
+    """构建一个完整 fake random run 目录树（ratio 参数化）。"""
 
-    def __init__(self, tmp, seed=SEED, rid=RID, leak=None):
+    def __init__(self, tmp, seed=SEED, rid=RID, leak=None, ratio="0.01"):
         run = os.path.join(tmp, "run")
         self.run = run
         self.rid = rid
         self.seed = seed
+        self.ratio = ratio
+        self.tag = ratio_tag(ratio)
         self.data = os.path.join(run, "data")
         self.img = os.path.join(run, "img")
         self.ckpt = os.path.join(run, "checkpoints", "CoIN_Replay_random",
-                                 "r001", rid)
+                                 self.tag, rid)
         self.res = os.path.join(run, "results", "CoIN_Replay_random",
-                                "r001", rid)
+                                self.tag, rid)
         self.replay = os.path.join(run, "playground", "Replay_random",
-                                   "r001", rid)
+                                   self.tag, rid)
         for d in (self.data, self.img, self.ckpt, self.res, self.replay):
             os.makedirs(d, exist_ok=True)
         # 1) 合成数据：无图样本（build 不校验 image 字段）；问题文件与 merge 对应
@@ -75,7 +81,7 @@ class FinalizeFixture:
             r = subprocess.run(
                 [sys.executable, BUILD, "--tasks", *TASKS,
                  "--data-dir", self.data, "--image-dir", self.img,
-                 "--round", str(j), "--ratio", "0.01",
+                 "--round", str(j), "--ratio", str(ratio),
                  "--sample-mode", "random", "--seed", str(seed),
                  "--out", out], capture_output=True, text=True)
             assert r.returncode == 0, r.stderr
@@ -116,7 +122,7 @@ class FinalizeFixture:
         man = {
             "run_id": f"coin_replay_r0.01_{seed}",
             "config": {
-                "ratio": 0.01, "tasks": TASKS, "T": 4,
+                "ratio": float(ratio), "tasks": TASKS, "T": 4,
                 "model_base": "checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5",
                 "vision_tower": "checkpoints/LLaVA/clip-vit-large-patch14-336",
                 "projector": "checkpoints/LLaVA/mm_projector.bin",
@@ -141,13 +147,14 @@ class FinalizeFixture:
         assert r.returncode == 0, r.stderr
 
     def assemble_args(self, out, repo_root=None, seed=None, force=False,
-                      test_mode=True, ckpt=None):
+                      test_mode=True, ckpt=None, expected_ratio=None):
         return Namespace(res_root=self.res,
                          ckpt_root=ckpt or self.ckpt,
                          replay_data_dir=self.replay,
                          data_dir=self.data,
                          run_id=self.rid,
                          expected_seed=self.seed if seed is None else seed,
+                         expected_ratio=self.ratio if expected_ratio is None else expected_ratio,
                          repo_root=repo_root or self.run,
                          out=out, force=force, test_mode=test_mode)
 
@@ -174,6 +181,9 @@ class TestRandomReplayFinalize(unittest.TestCase):
         cm = json.load(open(os.path.join(out, "coin_metrics.json")))
         self.assertEqual(summary["MAA"], cm["MAA"])
         self.assertEqual(summary["run_id"], RID)
+        self.assertEqual(summary["ratio_tag"], "r001")
+        self.assertEqual(summary["result_directory_rel"],
+                         f"results/CoIN_Replay_random/r001/{RID}")
         self.assertEqual(summary["sampling_algorithm"], SAMPLING_ALGORITHM)
         self.assertIsNone(summary["deltas"])
         self.assertTrue(summary["test_mode"])
@@ -260,13 +270,64 @@ class TestRandomReplayFinalize(unittest.TestCase):
         # staging 已清理
         self.assertEqual([x for x in os.listdir(self.tmp) if ".staging" in x], [])
 
+    # ---- ratio=0.10 / r010 通用化路径 -----------------------------------------
+    def test_assemble_r010_success(self):
+        fx = FinalizeFixture(os.path.join(self.tmp, "r010"), ratio="0.10")
+        out = self._out()
+        rc = F.assemble(fx.assemble_args(out))
+        self.assertEqual(rc, 0)
+        summary = json.load(open(os.path.join(out, "summary.json")))
+        self.assertEqual(summary["ratio_tag"], "r010")
+        self.assertEqual(float(summary["ratio"]), 0.1)
+        self.assertEqual(summary["result_directory_rel"],
+                         f"results/CoIN_Replay_random/r010/{RID}")
+        self.assertEqual(summary["ckpt_root_rel"],
+                         f"checkpoints/CoIN_Replay_random/r010/{RID}")
+        self.assertEqual(summary["replay_data_dir_rel"],
+                         f"playground/Replay_random/r010/{RID}")
+        # r010 sidecar 抽样条数 = floor(140*0.1)=14
+        rs = json.load(open(os.path.join(out, "replay_selection_summary.json")))
+        self.assertEqual(rs["rounds"]["2"]["tasks"]["ScienceQA"]["k"], 14)
+
+    def test_assemble_expected_ratio_mismatch_preserves_existing_out(self):
+        # fixture 是 0.10，却声称 expected ratio=0.01 → 必须 FAIL（数值比较）；out 不动
+        fx = FinalizeFixture(os.path.join(self.tmp, "r010b"), ratio="0.10")
+        out = self._out()
+        os.makedirs(out)
+        marker = os.path.join(out, "KEEP.txt")
+        open(marker, "w").write("keep")
+        rc = F.assemble(fx.assemble_args(out, expected_ratio="0.01"))
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(open(marker).read(), "keep")
+        self.assertEqual(sorted(os.listdir(out)), ["KEEP.txt"])
+
+    def test_assemble_invalid_expected_ratio_fails(self):
+        for bad in ("0.02", "0.5", "abc", ""):
+            rc = F.assemble(self.fx.assemble_args(self._out(), expected_ratio=bad))
+            self.assertNotEqual(rc, 0, f"expected_ratio={bad!r} 必须失败")
+            self.assertFalse(os.path.isdir(self._out()),
+                             "非法 expected ratio 不得产出发布目录")
+
+    def test_assemble_run_id_seed_mismatch_fails(self):
+        # run_id 内嵌 seed 与 --expected-seed 不一致 → 门 0 失败
+        rc = F.assemble(self.fx.assemble_args(self._out(), seed=SEED + 1))
+        self.assertNotEqual(rc, 0)
+        self.assertFalse(os.path.isdir(self._out()))
+
+    # ---- fill-delta：prefix 基线 + 同 seed 跨 ratio 配对 -----------------------
+    def _fill_args(self, summary, index, paired=None, result_commit=None,
+                   paired_result_commit=None):
+        return Namespace(summary=summary, index=index, paired_summary=paired,
+                         result_commit=result_commit,
+                         paired_result_commit=paired_result_commit)
+
     def test_fill_delta(self):
         out = self._out()
         self.assertEqual(F.assemble(self.fx.assemble_args(out)), 0)
         summary = os.path.join(out, "summary.json")
         idx = os.path.join(ROOT, "docs", "experiments", "coin_replay_random_r001",
                            "index.json")
-        rc = F.fill_delta(Namespace(summary=summary, index=idx))
+        rc = F.fill_delta(self._fill_args(summary, idx))
         self.assertEqual(rc, 0)
         s = json.load(open(summary))
         self.assertIn("vs_prefix_0.10", s["deltas"])
@@ -275,6 +336,50 @@ class TestRandomReplayFinalize(unittest.TestCase):
         base = json.load(open(idx))["baselines"]["prefix_0.01"]
         self.assertAlmostEqual(s["deltas"]["vs_prefix_0.01"]["MAA"],
                                round(s["MAA"] - base["MAA"], 4))
+
+    def test_fill_delta_paired_same_seed(self):
+        """同 seed 的 0.01 与 0.10 两个 run：配对差值方向 = 0.10 − 0.01。"""
+        fx01 = FinalizeFixture(os.path.join(self.tmp, "pair01"), ratio="0.01")
+        fx10 = FinalizeFixture(os.path.join(self.tmp, "pair10"), ratio="0.10")
+        out01, out10 = self._out() + "_01", self._out() + "_10"
+        self.assertEqual(F.assemble(fx01.assemble_args(out01)), 0)
+        self.assertEqual(F.assemble(fx10.assemble_args(out10)), 0)
+        idx = os.path.join(ROOT, "docs", "experiments", "coin_replay_random_r001",
+                           "index.json")
+        rc = F.fill_delta(self._fill_args(
+            os.path.join(out10, "summary.json"), idx,
+            paired=os.path.join(out01, "summary.json"),
+            result_commit="c" * 40, paired_result_commit="b" * 40))
+        self.assertEqual(rc, 0)
+        s10 = json.load(open(os.path.join(out10, "summary.json")))
+        s01 = json.load(open(os.path.join(out01, "summary.json")))
+        d = s10["deltas"]["vs_paired_r001"]
+        self.assertEqual(d["delta_definition"], "random-0.10 − random-0.01")
+        self.assertAlmostEqual(d["MAA"], round(s10["MAA"] - s01["MAA"], 4))
+        self.assertAlmostEqual(d["BWT"], round(s10["BWT"] - s01["BWT"], 4))
+        self.assertAlmostEqual(d["final_avg"], round(s10["final_avg"] - s01["final_avg"], 4))
+        p = s10["paired"]
+        self.assertEqual(p["this_run_id"], fx10.rid)
+        self.assertEqual(p["paired_run_id"], fx01.rid)
+        self.assertEqual(p["seed"], SEED)
+        self.assertEqual(p["this_result_commit"], "c" * 40)
+        self.assertEqual(p["paired_result_commit"], "b" * 40)
+        self.assertEqual(p["this_code_commit"], s10["code_commit"])
+        self.assertEqual(p["paired_code_commit"], s01["code_commit"])
+
+    def test_fill_delta_paired_seed_mismatch_rejected(self):
+        fx01 = FinalizeFixture(os.path.join(self.tmp, "bad01"), ratio="0.01",
+                               seed=SEED)
+        fx10 = FinalizeFixture(os.path.join(self.tmp, "bad10"), ratio="0.10",
+                               seed=SEED + 7, rid="run_0002_seed_%d" % (SEED + 7))
+        out01, out10 = self._out() + "_b01", self._out() + "_b10"
+        self.assertEqual(F.assemble(fx01.assemble_args(out01)), 0)
+        self.assertEqual(F.assemble(fx10.assemble_args(out10)), 0)
+        idx = os.path.join(ROOT, "docs", "experiments", "coin_replay_random_r001",
+                           "index.json")
+        with self.assertRaises(SystemExit):
+            F.fill_delta(self._fill_args(os.path.join(out10, "summary.json"), idx,
+                                         paired=os.path.join(out01, "summary.json")))
 
 
 if __name__ == "__main__":

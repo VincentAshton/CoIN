@@ -18,7 +18,7 @@ done < <(find "$ROOT/scripts" -name '*.sh' | sort)
 echo "bash -n done (fail=$FAIL)"
 
 echo "==== [A2] py_compile 全部 python 脚本 ===="
-if ! "$PY" -m py_compile "$ROOT"/scripts/CoIN_Replay/*.py; then
+if ! "$PY" -m py_compile "$ROOT"/scripts/CoIN_Replay/*.py "$ROOT"/scripts/CoIN_Replay/tools/*.py; then
     echo "FAIL py_compile"; FAIL=1
 fi
 echo "py_compile done (fail=$FAIL)"
@@ -50,6 +50,15 @@ if [ -n "$PBV" ]; then
     fi
 else
     echo "protobuf 不可用（零依赖环境），跳过版本断言"
+fi
+
+echo "==== [A6] PIL 可用性（图片解码类用例前置；本地零依赖环境会 skip） ===="
+PILV=$("$PY" -c "import PIL, importlib.metadata as im; print(im.version('Pillow'))" 2>/dev/null)
+if [ -n "$PILV" ]; then
+    echo "Pillow $PILV OK（图片解码类用例真实执行）"
+else
+    echo "PIL 不可用（零依赖环境）：图片解码类用例标 skip（见 helpers.PIL_SKIP_REASON）——"
+    echo "  云端完整依赖环境必须真实执行这些用例，不得把 skip 计为通过"
 fi
 
 echo "=================================================="

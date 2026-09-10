@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""random-replay 系列结果发布/清理脚本（codex/coin-replay-random-r001 分支）。
+"""random-replay 系列结果发布/清理脚本（分支 codex/coin-replay-random；ratio 通用）。
 
 两阶段：
   阶段 1 assemble —— 训练机（真实产物）上运行。对 RES_ROOT 执行任务书十一完成验证清单
@@ -7,13 +7,19 @@
     全部 PASS 后**原子换入** <out>/。验收失败或扫描不过 → 非零退出，既有发布目录分毫不动。
     完整 sidecar manifest / 预测 / checkpoint / 日志留在训练机（不进 Git）。
   阶段 2 fill-delta —— 本地发布目录上运行：读 index.json 的 prefix 基线，把与
-    prefix-0.01 / prefix-0.10 的差值写进 summary.json。
+    prefix-0.01 / prefix-0.10 的差值写进 summary.json；如给 --paired-summary 还写入与
+    同 seed 另一 ratio run 的配对差值（方向恒为 高 ratio − 低 ratio，即 0.10 − 0.01）。
 
-assemble 强制门（2026-09-08 审计加固）：
-  - RES_ROOT/CKPT_ROOT/REPLAY_DATA_DIR 同属 CoIN_Replay_random/r001/<run_id>
+assemble 强制门（2026-09-11 ratio 通用化）：
+  - expected ratio 显式给出且属于允许集合（0.01 / 0.10）；ratio tag 由 ratio 派生
+    （coin_lib.ratio_tag：0.01→r001、0.10→r010），不接受调用方另传 tag
+  - run_manifest ratio == expected ratio（数值比较）；sample_mode==random；
+    replay_sample_seed==登记；replay_accum==1；run_id 内嵌 seed==登记 seed
+  - RES_ROOT/CKPT_ROOT/REPLAY_DATA_DIR 分别属于 CoIN_Replay_random/<tag>/<run_id> 与
+    Replay_random/<tag>/<run_id>，且互异
   - replay sidecar sampling_algorithm == 期望常量（build_replay_data.SAMPLING_ALGORITHM）
-  - 用源数据（train.json）+ task seed 独立重建排列：索引数量=k、无重复、∈[0,N)、
-    selected_ids 与 replay JSON 顺序一一对应；源文件 SHA 与 sidecar 一致
+  - 用源数据（train.json）+ task seed 按 expected ratio 独立重建排列：索引数量=k、
+    无重复、∈[0,N)、selected_ids 与 replay JSON 顺序一一对应；源文件 SHA 与 sidecar 一致
   - 发布 6 文件脱敏扫描：无绝对路径 / IP / 主机名 / 凭据 / token
   - torch 门禁（checkpoint 参数级 + tensor-diff）：默认必须真实 torch；
     --test-mode 仅供零 GPU 单测降级为文件级并显式标注（正式发布禁止）
@@ -23,11 +29,13 @@ assemble 强制门（2026-09-08 审计加固）：
   python3 scripts/CoIN_Replay/tools/random_replay_finalize.py assemble \\
       --res-root <RES_ROOT> --ckpt-root <CKPT_ROOT> --replay-data-dir <REPLAY_DATA_DIR> \\
       --data-dir <DATA_DIR> --run-id run_0001_seed_xxx --expected-seed <N> \\
-      --repo-root . --out <export_dir> [--force]
+      --expected-ratio 0.10 --repo-root . --out <export_dir> [--force]
   # 本地
   python3 scripts/CoIN_Replay/tools/random_replay_finalize.py fill-delta \\
       --summary docs/.../runs/<run_id>/summary.json \\
-      --index  docs/experiments/coin_replay_random_r001/index.json
+      --index  docs/experiments/coin_replay_random_r010/index.json \\
+      [--paired-summary docs/.../coin_replay_random_r001/runs/<run_id>/summary.json \\
+       --result-commit <C> --paired-result-commit <C2>]
 """
 import argparse
 import datetime
@@ -45,7 +53,8 @@ sys.path.insert(0, os.path.join(REPO_ROOT, "scripts", "CoIN_Replay"))
 
 from coin_lib import (  # noqa: E402
     ACC_TEXT_RE, artifact_check, ckpt_tensor_compare, ckpt_validate,
-    json_load, sha256_file, verify_predictions,
+    json_load, normalize_ratio, random_ratio_layout, ratio_tag, sha256_file,
+    verify_predictions,
 )
 from build_replay_data import SAMPLING_ALGORITHM, task_seed_hex  # noqa: E402
 
@@ -270,10 +279,25 @@ def assemble(args) -> int:
     def R(p):
         return rel(p, repo_root)
 
+    # ---- 门 0：expected ratio / tag / run_id（ratio 通用化；禁写死 0.01/r001） ----
+    ratio_d, tag = None, None
+    try:
+        ratio_d = normalize_ratio(args.expected_ratio)
+        tag = ratio_tag(ratio_d)
+        check("expected ratio 属于允许集合", True,
+              f"expected_ratio={args.expected_ratio} → 归一化 {ratio_d} / tag {tag}")
+    except ValueError as e:
+        check("expected ratio 属于允许集合", False, str(e))
+    m_rid = re.fullmatch(r"run_(\d{4})_seed_(\d+)", args.run_id or "")
+    check("run_id 格式 run_NNNN_seed_<seed> 且内嵌 seed==登记 seed",
+          bool(m_rid) and int(m_rid.group(2)) == args.expected_seed, args.run_id or "<空>")
     # ---- 门 1-4：完成标志 / 归属 / manifest 配置 / coin_metrics ---------------
     check(".complete 存在", os.path.isfile(os.path.join(res_root, ".complete")),
           R(os.path.join(res_root, ".complete")))
-    check("结果目录归属 run_id", os.path.basename(res_root) == args.run_id,
+    check("三个目录 basename 均为 run_id",
+          os.path.basename(res_root) == args.run_id
+          and os.path.basename(ckpt_root) == args.run_id
+          and os.path.basename(replay_dir) == args.run_id,
           R(res_root))
     man = json_load(os.path.join(res_root, "run_manifest.json"))
     cfg = man["config"]
@@ -282,8 +306,9 @@ def assemble(args) -> int:
     check("run_manifest replay_sample_seed==登记",
           cfg.get("replay_sample_seed") == args.expected_seed,
           f"replay_sample_seed={cfg.get('replay_sample_seed')}")
-    check("run_manifest ratio==0.01", abs(float(cfg.get("ratio", -1)) - 0.01) < 1e-9,
-          f"ratio={cfg.get('ratio')}")
+    check("run_manifest ratio == expected ratio（数值比较）",
+          ratio_d is not None and abs(float(cfg.get("ratio", -1)) - float(ratio_d)) < 1e-9,
+          f"manifest={cfg.get('ratio')} expected={args.expected_ratio}")
     check("run_manifest replay_accum==1", cfg.get("replay_accum") == 1,
           f"replay_accum={cfg.get('replay_accum')}")
     cm = json_load(os.path.join(res_root, "coin_metrics.json"))
@@ -302,10 +327,11 @@ def assemble(args) -> int:
         json_load(p)
     check("round manifests 1..4 完整可解析", rm_ok)
     # ---- 门 6-7：sidecar 一致性 + 独立重建（含 sampling_algorithm 常量门） ------
+    _ratio_float = float(ratio_d) if ratio_d is not None else -1.0
     try:
         rsum = build_replay_selection_summary(args.run_id, args.expected_seed,
                                               replay_dir, data_dir,
-                                              float(cfg.get("ratio", 0.01)), TASKS)
+                                              _ratio_float, TASKS)
         sidecar_ok = True
         side_ev = []
         for j in (2, 3, 4):
@@ -321,16 +347,21 @@ def assemble(args) -> int:
               "round2..4 × 全部历史任务 PASS")
     except Exception as e:
         check("sidecar/重建门", False, str(e))
-    # ---- 门 8：目录同属与不混用 -----------------------------------------------
-    # 布局（任务书八.4）：checkpoints|results/CoIN_Replay_random/r001/<run_id>；
-    # playground/Replay_random/r001/<run_id>（replay 数据目录无 CoIN_ 前缀）
-    run_dir = f"r001/{args.run_id}"
-    ckpt_ok = ckpt_root.endswith(os.path.join("CoIN_Replay_random", run_dir))
-    res_ok = res_root.endswith(os.path.join("CoIN_Replay_random", run_dir))
-    replay_ok = replay_dir.endswith(os.path.join("Replay_random", run_dir))
-    same_tree = ckpt_ok and res_ok and replay_ok
+    # ---- 门 8：目录同属与不混用（tag 由 expected ratio 派生） -------------------
+    # 布局（任务书八.4）：checkpoints|results/CoIN_Replay_random/<tag>/<run_id>；
+    # playground/Replay_random/<tag>/<run_id>（replay 数据目录无 CoIN_ 前缀）
+    layout = random_ratio_layout(ratio_d, args.run_id) if tag else None
+    if layout:
+        run_dir = f"{tag}/{args.run_id}"
+        ckpt_ok = ckpt_root.endswith(os.path.join("CoIN_Replay_random", run_dir))
+        res_ok = res_root.endswith(os.path.join("CoIN_Replay_random", run_dir))
+        replay_ok = replay_dir.endswith(os.path.join("Replay_random", run_dir))
+        same_tree = ckpt_ok and res_ok and replay_ok
+    else:
+        same_tree = False
     distinct = len({ckpt_root, res_root, replay_dir}) == 3
-    check("CKPT/RES/REPLAY 同属 random/r001/<run_id> 且互异", same_tree and distinct,
+    check(f"CKPT/RES/REPLAY 同属 random/{tag}/<run_id> 且互异",
+          same_tree and distinct,
           f"ckpt={R(ckpt_root)} res={R(res_root)} replay={R(replay_dir)}")
     # ---- 门 9-11：torch 门（默认真实；--test-mode 降级并显式标注） ---------------
     try:
@@ -433,6 +464,7 @@ def assemble(args) -> int:
         return 1
 
     # ---- 组装到 staging（全部 PASS 后才原子换入 out） ---------------------------
+    layout = layout if layout else random_ratio_layout(ratio_d, args.run_id)
     if os.path.isdir(out_dir) and os.listdir(out_dir) and not args.force:
         print(f"ERROR: 发布目录已存在且未 --force: {out_dir}（既有发布目录未动）")
         return 1
@@ -459,6 +491,7 @@ def assemble(args) -> int:
             "replay_sample_seed": args.expected_seed,
             "sample_mode": cfg.get("sample_mode"),
             "ratio": cfg.get("ratio"),
+            "ratio_tag": tag,
             "replay_accum": cfg.get("replay_accum"),
             "sampling_algorithm": SAMPLING_ALGORITHM,
             "MAA": round(mtr["MAA"], 4),
@@ -469,12 +502,9 @@ def assemble(args) -> int:
             "row_averages": mtr["row_averages"],
             "per_task_final_minus_diagonal": {
                 t: round(v, 4) for t, v in mtr["per_task_final_minus_diagonal"].items()},
-            "result_directory_rel": os.path.join("results", "CoIN_Replay_random",
-                                                 "r001", args.run_id),
-            "ckpt_root_rel": os.path.join("checkpoints", "CoIN_Replay_random",
-                                          "r001", args.run_id),
-            "replay_data_dir_rel": os.path.join("playground", "Replay_random",
-                                                "r001", args.run_id),
+            "result_directory_rel": layout["res_root"],
+            "ckpt_root_rel": layout["ckpt_root"],
+            "replay_data_dir_rel": layout["replay_data_dir"],
             "code_commit": man.get("git", {}).get("commit"),
             "config_hash": man.get("config_hash"),
             "model_config_hash": man.get("model_config_hash"),
@@ -563,8 +593,14 @@ def scan_export(d):
 
 
 def build_validation_report(args, results, A, mtr, cm, rsum, man, test_mode) -> str:
+    try:
+        ratio_line = (f"- expected ratio: {args.expected_ratio}"
+                      f"（ratio tag {ratio_tag(args.expected_ratio)}）")
+    except ValueError:
+        ratio_line = f"- expected ratio: {args.expected_ratio}（非法，见检查清单）"
     lines = [f"# Validation Report — {args.run_id}", "",
              f"- 生成: {now_iso()}（random_replay_finalize.py assemble）",
+             ratio_line,
              f"- run_manifest engine run_id: {man.get('run_id')}",
              f"- git commit: {man.get('git', {}).get('commit')}",
              f"- config_hash: {man.get('config_hash')}",
@@ -622,6 +658,42 @@ def fill_delta(args) -> int:
             "BWT": round(s["BWT"] - b["BWT"], 4),
             "final_avg": round(s["final_avg"] - b["final_avg"], 4),
         }
+    # 同 seed 配对差值（方向恒为 高 ratio − 低 ratio，即 random-0.10 − random-0.01）
+    if args.paired_summary:
+        p = json.load(open(args.paired_summary, encoding="utf-8"))
+        for k in ("MAA", "BWT", "final_avg", "ratio", "replay_sample_seed"):
+            if p.get(k) is None:
+                raise SystemExit(f"配对 summary 缺 {k}: {args.paired_summary}")
+        if p["replay_sample_seed"] != s.get("replay_sample_seed"):
+            raise SystemExit(
+                f"配对 summary 的 replay_sample_seed={p['replay_sample_seed']} 与本 run "
+                f"{s.get('replay_sample_seed')} 不一致——配对必须同 seed（禁按 run_number 猜测）")
+        if float(p["ratio"]) == float(s["ratio"]):
+            raise SystemExit(f"配对 summary 与本 run 的 ratio 相同（{s['ratio']}）——"
+                             "配对须为不同 ratio（0.01 vs 0.10）")
+        hi, lo = ((s, p) if float(s["ratio"]) > float(p["ratio"]) else (p, s))
+        direction = f"random-{float(hi['ratio']):.2f} − random-{float(lo['ratio']):.2f}"
+        p_tag = p.get("ratio_tag") or ratio_tag(p["ratio"])
+        out[f"vs_paired_{p_tag}"] = {
+            "MAA": round(s["MAA"] - p["MAA"], 4),
+            "BWT": round(s["BWT"] - p["BWT"], 4),
+            "final_avg": round(s["final_avg"] - p["final_avg"], 4),
+            "delta_definition": direction,
+        }
+        s["paired"] = {
+            "paired_run_id": p.get("run_id"),
+            "paired_ratio": p.get("ratio"),
+            "paired_ratio_tag": p_tag,
+            "paired_result_commit": args.paired_result_commit,
+            "paired_code_commit": p.get("code_commit"),
+            "this_run_id": s.get("run_id"),
+            "this_ratio": s.get("ratio"),
+            "this_ratio_tag": s.get("ratio_tag"),
+            "this_result_commit": args.result_commit,
+            "this_code_commit": s.get("code_commit"),
+            "seed": s.get("replay_sample_seed"),
+            "delta_definition": direction,
+        }
     s["deltas"] = out
     with open(args.summary, "w", encoding="utf-8") as f:
         json.dump(s, f, indent=2, ensure_ascii=False)
@@ -640,6 +712,9 @@ def main():
     p1.add_argument("--data-dir", required=True, help="源 train.json + 问题文件根")
     p1.add_argument("--run-id", required=True)
     p1.add_argument("--expected-seed", type=int, required=True)
+    p1.add_argument("--expected-ratio", required=True,
+                    help="本 run 的 replay 比例（random 系列只允许 0.01 / 0.10；"
+                         "ratio tag 由该值派生，不接受另传 tag）")
     p1.add_argument("--repo-root", default=".")
     p1.add_argument("--out", required=True)
     p1.add_argument("--force", action="store_true")
@@ -649,6 +724,10 @@ def main():
     p2 = sub.add_parser("fill-delta")
     p2.add_argument("--summary", required=True)
     p2.add_argument("--index", required=True)
+    p2.add_argument("--paired-summary", default=None,
+                    help="同 seed 另一 ratio run 的 summary.json（配对差值 = 本 run − 该 run）")
+    p2.add_argument("--result-commit", default=None, help="本 run 的结果提交 C（协议 C 真实 hash）")
+    p2.add_argument("--paired-result-commit", default=None, help="配对 run 的结果提交 C 真实 hash")
     p2.set_defaults(fn=fill_delta)
     args = ap.parse_args()
     sys.exit(args.fn(args))

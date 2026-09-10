@@ -7,9 +7,11 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(__file__))
-from helpers import REPLAY_DIR, build_synthetic, make_aux, run, tiny_png
+from helpers import (HAVE_PIL, PIL_SKIP_REASON, REPLAY_DIR, build_synthetic,
+                     make_aux, run, tiny_png)
 
 PRE = [sys.executable, os.path.join(REPLAY_DIR, "preflight_data.py")]
+requires_pil = unittest.skipUnless(HAVE_PIL, PIL_SKIP_REASON)
 
 
 class TestPreflightData(unittest.TestCase):
@@ -35,6 +37,7 @@ class TestPreflightData(unittest.TestCase):
             "--tasks", "ScienceQA", "TextVQA", "ImageNet", "GQA",
         ] + (extra or []))
 
+    @requires_pil
     def test_ok(self):
         r = self._run()
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -43,6 +46,7 @@ class TestPreflightData(unittest.TestCase):
         self.assertTrue(rep["data_sha256"])
         self.assertEqual(rep["tasks"]["ScienceQA"]["samples"]["train"], 5)
 
+    @requires_pil
     def test_missing_image(self):
         os.remove(os.path.join(self.img_dir, "TextVQA", "img", "1.png"))
         r = self._run()
@@ -50,6 +54,7 @@ class TestPreflightData(unittest.TestCase):
         rep = json.load(open(self.report))
         self.assertIn("TextVQA/img/1.png", rep["tasks"]["TextVQA"]["missing"])
 
+    @requires_pil
     def test_corrupt_image(self):
         with open(os.path.join(self.img_dir, "GQA", "img", "2.png"), "wb") as f:
             f.write(b"not an image")
@@ -65,6 +70,7 @@ class TestPreflightData(unittest.TestCase):
         # --skip-pil 是显式跳过硬解码的选项：损坏但非空文件此时通过（文档化降级）
         self.assertEqual(r.returncode, 0, r.stderr)
 
+    @requires_pil
     def test_path_escape(self):
         tp = os.path.join(self.data_dir, "ImageNet", "train.json")
         data = json.load(open(tp))
@@ -76,6 +82,7 @@ class TestPreflightData(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("越界", r.stdout + r.stderr)
 
+    @requires_pil
     def test_layout_mismatch(self):
         # 把 ImageNet 的 image 路径首段改成别的目录名
         tp = os.path.join(self.data_dir, "ImageNet", "train.json")
@@ -87,12 +94,14 @@ class TestPreflightData(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("布局", r.stdout + r.stderr)
 
+    @requires_pil
     def test_missing_aux(self):
         os.remove(os.path.join(self.img_dir, "ScienceQA", "pid_splits.json"))
         r = self._run()
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("pid_splits.json", r.stdout + r.stderr)
 
+    @requires_pil
     def test_data_sha256_changes_with_data(self):
         r1 = self._run()
         sha1 = json.load(open(self.report))["data_sha256"]

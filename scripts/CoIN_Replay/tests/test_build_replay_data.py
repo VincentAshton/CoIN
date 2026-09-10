@@ -7,7 +7,8 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(__file__))
-from helpers import REPLAY_DIR, build_synthetic, make_llava_sample, run, tiny_png
+from helpers import (HAVE_PIL, PIL_SKIP_REASON, REPLAY_DIR, build_synthetic,
+                     make_llava_sample, run, tiny_png)
 
 BUILD = [sys.executable, os.path.join(REPLAY_DIR, "build_replay_data.py")]
 
@@ -92,6 +93,7 @@ class TestBuildReplayData(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("ghost.png", r.stdout + r.stderr)
 
+    @unittest.skipUnless(HAVE_PIL, PIL_SKIP_REASON)
     def test_corrupt_image_fails(self):
         with open(os.path.join(self.img_dir, "TextVQA", "img", "corrupt.png"), "wb") as f:
             f.write(b"this is not a png")

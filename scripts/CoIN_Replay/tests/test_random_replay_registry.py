@@ -38,6 +38,13 @@ class TestRandomReplayRegistry(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="coin_reg_")
         self.docdir = os.path.join(self.tmp, "registry")
         shutil.copytree(DOCSRC, self.docdir)
+        # 空注册表夹具：清空 runs 并用 registry 自身重写三件套。测试断言 run_0001 起编号，
+        # 不能依赖线上注册表当前累积的运行数（线上已有多轮 COMPLETE）。
+        sys.path.insert(0, os.path.join(ROOT, "scripts", "CoIN_Replay", "tools"))
+        import random_replay_registry as R
+        idx = R.load_index(self.docdir)
+        idx["runs"] = []
+        R.write_index(self.docdir, idx)
         self.three = [os.path.join(self.docdir, "index.json"),
                       os.path.join(self.docdir, "index.csv"),
                       os.path.join(self.docdir, "README.md")]

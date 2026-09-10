@@ -1,4 +1,5 @@
 """测试公共工具：合成数据 / 图片 / 子进程运行。"""
+import importlib.util
 import json
 import os
 import shutil
@@ -9,6 +10,13 @@ import zlib
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 REPLAY_DIR = os.path.join(ROOT, "scripts", "CoIN_Replay")
+
+# Pillow 是可选依赖（脚本在无 PIL 时降级为文件级检查）。图片解码类断言只在 PIL 可用时
+# 有意义：本地零依赖环境跳过（显式标注），**云端完整依赖环境必须真实执行**——
+# 这些 skip 不得被当作通过。
+HAVE_PIL = importlib.util.find_spec("PIL") is not None
+PIL_SKIP_REASON = ("需要 PIL（Pillow）做图片解码：本地零依赖环境未安装；"
+                   "云端完整依赖环境必须真实执行，不得计入通过")
 
 
 def tiny_png() -> bytes:

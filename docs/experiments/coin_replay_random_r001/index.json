@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
   "series": "CoIN+Replay random replay 抽样系列 r001：SAMPLE_MODE=random RATIO=0.01 REPLAY_ACCUM=1 SEED=1234 DATA_SEED=1234，只变 REPLAY_SAMPLE_SEED",
+  "ratio": 0.01,
+  "ratio_tag": "r001",
+  "sample_mode": "random",
+  "result_directory_root": "results/CoIN_Replay_random/r001",
+  "paired_series_dir": "docs/experiments/coin_replay_random_r010",
   "baselines": {
     "prefix_0.10": {
       "label": "prefix ratio=0.10 (2026-09-04)",
@@ -34,7 +39,10 @@
       "config_hash": "d06b56169e4db95b7cab47c687f4ded43ee34a9417319f2731d44dcb5461b110",
       "error_summary": null,
       "registration_commit": "c9f8c0272f1fd2e6c2207d17057262fc42d2f6c5",
-      "result_commit": "de8bfcac25bf28f57160e99be5c887c7914cee22"
+      "result_commit": "de8bfcac25bf28f57160e99be5c887c7914cee22",
+      "ratio": 0.01,
+      "ratio_tag": "r001",
+      "paired_with": null
     },
     {
       "run_number": 2,
@@ -52,7 +60,10 @@
       "config_hash": "3fc0410240f49ba044c0e1a08135d3da6e383c36ce21b6c55fc0bc307ea47993",
       "error_summary": null,
       "registration_commit": "d959e329093f4d3ebbe76ebe8655718e84518bd7",
-      "result_commit": "d640ebdbe3500624f7fc542bdef56e66c1dbaae3"
+      "result_commit": "d640ebdbe3500624f7fc542bdef56e66c1dbaae3",
+      "ratio": 0.01,
+      "ratio_tag": "r001",
+      "paired_with": null
     },
     {
       "run_number": 3,
@@ -70,7 +81,10 @@
       "config_hash": "78b58ec20c3e917f0548ffae4c2245e72caf5ef622681f2ee46cfaa3ec8afb8c",
       "error_summary": null,
       "registration_commit": "b5a829d45087355328e5cdcd3b798210bab8ed74",
-      "result_commit": "d8d361cbebacc24cb2bb960953ed528dd7518adb"
+      "result_commit": "d8d361cbebacc24cb2bb960953ed528dd7518adb",
+      "ratio": 0.01,
+      "ratio_tag": "r001",
+      "paired_with": null
     },
     {
       "run_number": 4,
@@ -88,7 +102,10 @@
       "config_hash": "d2979e5ed045800ea2383ea1c39f4b44aecdadccb0f471212c14f9e9b24cccef",
       "error_summary": null,
       "registration_commit": "095392b4b93dc3b0919aff0e76bed628e1085f14",
-      "result_commit": "d31d8b67f6dc1f76a533b5d5b970a699b3af445a"
+      "result_commit": "d31d8b67f6dc1f76a533b5d5b970a699b3af445a",
+      "ratio": 0.01,
+      "ratio_tag": "r001",
+      "paired_with": null
     },
     {
       "run_number": 5,
@@ -106,7 +123,10 @@
       "config_hash": "cc053788118d3d4089e79b900dfc000efc8191c1f8a5bc36fa76abfe8f4eb44e",
       "error_summary": null,
       "registration_commit": "e46ee3c86ca4bba7a6166f601f785d92c8c15fa1",
-      "result_commit": "97023b8a06b5ef5003654a048cb4ef035efa0fee"
+      "result_commit": "97023b8a06b5ef5003654a048cb4ef035efa0fee",
+      "ratio": 0.01,
+      "ratio_tag": "r001",
+      "paired_with": null
     }
   ]
 }

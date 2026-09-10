@@ -15,7 +15,8 @@
 #   GPUS=0,1,2,3  BATCH=14  ACCUM=16  LR=2e-4  LORA_R=192  LORA_ALPHA=256
 #   EPOCHS=1  REPLAY_EPOCHS=1  SEED=1234  DATA_SEED=1234  SAMPLE_MODE=prefix
 #   REPLAY_SAMPLE_SEED=1234  (random 模式：与 task name 派生 task seed)
-#   RANDOM_REPLAY_RUN_ID=run_0001_seed_1234  (random 系列必设：run_NNNN_seed_<seed>)
+#   RANDOM_REPLAY_RUN_ID=run_0001_seed_1234  (random 系列必设：run_NNNN_seed_<seed>；
+#     random 系列 ratio 只允许 0.01 / 0.10，ratio tag 由 ratio 派生 r001 / r010)
 #   DS_CONFIG=scripts/zero3_offload.json  ENFORCE_MIN_STEPS=0  DRY_RUN=0
 #   TASKS_JSON='["ScienceQA","TextVQA","ImageNet","GQA"]'  PREFLIGHT_ARGS=""
 # ============================================================================
@@ -382,17 +383,25 @@ run_round() {
   log "round$j 完成（round${j}_manifest.json + .round${j}_done）"
 }
 
-# ---- random-r001 启动 fail-fast 门（2026-09-08 审计加固） ----------------------
+# ---- random 系列启动 fail-fast 门（2026-09-11 ratio 通用化） ------------------
 # 仅当 RANDOM_REPLAY_RUN_ID 显式设置时启用；prefix 旧实验不设 → 行为完全不变。
+# ratio → ratio tag 由 coin_lib.py 的 ratio-tag 派生（数值归一化；禁字符串比较、
+# 禁操作者另填 tag）；目录必须精确属于该 tag 与 run_id。
 # 在任何数据预检/训练之前验证正式启动姿势；全部 PASS 才继续。
-random_r001_gate() {
-  local fail=0 rid seed_part
+random_replay_gate() {
+  local fail=0 rid seed_part tag=""
   [[ -n "$RANDOM_REPLAY_RUN_ID" ]] || return 0
   note() { echo "  [gate] $*"; }
-  err()  { echo "FAIL(random-r001 gate): $*"; fail=$((fail + 1)); }
+  err()  { echo "FAIL(random-replay gate): $*"; fail=$((fail + 1)); }
 
   [[ "$SAMPLE_MODE" == "random" ]] || err "SAMPLE_MODE 必须是 random（收到 $SAMPLE_MODE）"
-  [[ "$RATIO" == "0.01" ]] || err "RATIO 必须是 0.01（收到 $RATIO）"
+  # ratio 允许集合 + tag 派生（唯一来源 = coin_lib.py；不合法即 fail-fast）
+  if tag=$(python3 "$COIN_LIB" ratio-tag "$RATIO" 2>/dev/null); then
+    note "ratio=$RATIO → ratio tag=$tag（由 ratio 数值派生）"
+  else
+    tag=""
+    err "RATIO 非法（收到 $RATIO）：random 系列只允许 0.01 与 0.10（数值归一化判定）"
+  fi
   if [[ ! "$REPLAY_SAMPLE_SEED" =~ ^[0-9]+$ ]] || (( REPLAY_SAMPLE_SEED < 1 )) \
      || (( REPLAY_SAMPLE_SEED > 2147483647 )); then
     err "REPLAY_SAMPLE_SEED 必须是正的 31-bit 整数（收到 $REPLAY_SAMPLE_SEED）"
@@ -406,18 +415,20 @@ random_r001_gate() {
   else
     err "RANDOM_REPLAY_RUN_ID 格式非法: $rid（期望 run_NNNN_seed_<seed>）"
   fi
-  local d
-  for d in "$CKPT_ROOT" "$RES_ROOT"; do
-    case "$d" in
-      */CoIN_Replay_random/r001/"$rid") note "路径 OK: $d" ;;
-      *) err "目录必须属于 CoIN_Replay_random/r001/$rid（收到 $d）" ;;
+  if [[ -n "$tag" ]]; then
+    local d
+    for d in "$CKPT_ROOT" "$RES_ROOT"; do
+      case "$d" in
+        */CoIN_Replay_random/"$tag"/"$rid") note "路径 OK: $d" ;;
+        *) err "目录必须属于 CoIN_Replay_random/$tag/$rid（收到 $d）" ;;
+      esac
+    done
+    # replay 数据目录布局是 playground/Replay_random/<tag>/<run_id>（无 CoIN_ 前缀）
+    case "$REPLAY_DATA_DIR" in
+      */Replay_random/"$tag"/"$rid") note "路径 OK: $REPLAY_DATA_DIR" ;;
+      *) err "REPLAY_DATA_DIR 必须属于 Replay_random/$tag/$rid（收到 $REPLAY_DATA_DIR）" ;;
     esac
-  done
-  # replay 数据目录布局是 playground/Replay_random/（无 CoIN_ 前缀，任务书八.4）
-  case "$REPLAY_DATA_DIR" in
-    */Replay_random/r001/"$rid") note "路径 OK: $REPLAY_DATA_DIR" ;;
-    *) err "REPLAY_DATA_DIR 必须属于 Replay_random/r001/$rid（收到 $REPLAY_DATA_DIR）" ;;
-  esac
+  fi
   [[ "$CKPT_ROOT" != "$RES_ROOT" && "$RES_ROOT" != "$REPLAY_DATA_DIR" \
      && "$CKPT_ROOT" != "$REPLAY_DATA_DIR" ]] || \
     err "CKPT_ROOT/RES_ROOT/REPLAY_DATA_DIR 必须互不相同"
@@ -436,10 +447,10 @@ random_r001_gate() {
   (( uniq == tokens )) || err "GPUS 含重复设备: $GPUS"
 
   if (( fail )); then
-    echo "ERROR: random-r001 启动姿势校验失败（共 $fail 项），禁止进入 preflight/训练" >&2
+    echo "ERROR: random-replay 启动姿势校验失败（共 $fail 项），禁止进入 preflight/训练" >&2
     exit 1
   fi
-  log "random-r001 gate PASS: run_id=$rid"
+  log "random-replay gate PASS: run_id=$rid ratio=$RATIO tag=$tag"
 }
 
 # ---- 主流程 ----------------------------------------------------------------
@@ -458,8 +469,8 @@ main() {
       die "存在 .complete 但缺 run_manifest.json——结果目录状态损坏，拒绝继续"
     fi
   fi
-  # random-r001 启动 fail-fast（preflight 之前；prefix 模式 RANDOM_REPLAY_RUN_ID 为空 → 跳过）
-  random_r001_gate
+  # random 系列启动 fail-fast（preflight 之前；prefix 模式 RANDOM_REPLAY_RUN_ID 为空 → 跳过）
+  random_replay_gate
   preflight
   write_manifest
   mkdir -p "$RES_ROOT/logs"

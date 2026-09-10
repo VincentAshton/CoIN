@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""random-replay 系列实验注册表维护工具（codex/coin-replay-random-r001 分支）。
+"""random-replay 系列实验注册表维护工具（分支 codex/coin-replay-random；ratio 通用）。
 
 维护三件套（同一目录）：
   - index.json    —— 权威结构化记录（append-only；RUNNING 可更新为 COMPLETE/FAILED）
   - index.csv     —— 同内容扁平表（供脚本/表格工具读取）
   - README.md     —— 两个标记块之间的状态表（<!-- registry-table:start/end -->）
+
+比例通用化（2026-09-11）：
+  - 本工具不再写死 r001：ratio / ratio_tag / sample_mode / result_directory_root 全部从
+    index.json 顶部元数据读取；ratio_tag 必须等于 coin_lib.ratio_tag(ratio)（由 ratio 派生）
+  - 每个 ratio 一个系列目录（coin_replay_random_r001 / coin_replay_random_r010），
+    各自独立 run_number 序列（run_0001 起），互不影响
+  - 同一 ratio 内禁止复用 seed；不同 ratio 之间允许同 seed（同 seed 配对是设计需要）
+  - 追加无上限：不设"最多 N 次"限制
 
 纪律（任务书六 + 2026-09-08 审计加固）：
   - 记录只能追加或 RUNNING -> COMPLETE/FAILED；不得删除失败记录
@@ -21,7 +29,8 @@ complete 必须提供 --registration-commit（=A）；--status COMPLETE 还必�
 --result-commit（=C）。hash 用 `git log --format=%H --grep <run_id>` 反查，禁编造。
 
 用法:
-  python tools/random_replay_registry.py <docdir> register [--seed N] [--started-at ISO]
+  python tools/random_replay_registry.py <docdir> register [--seed N] [--started-at ISO] \\
+        [--paired-with <run_id> --paired-index <other index.json>]
   python tools/random_replay_registry.py <docdir> complete --run-id ID --status COMPLETE|FAILED \\
         [--summary <runs/<run_id>/summary.json>] [--maa f] [--bwt f] [--error-summary TEXT] ...
   python tools/random_replay_registry.py <docdir> list
@@ -35,6 +44,9 @@ import os
 import secrets
 import sys
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from coin_lib import normalize_ratio, ratio_tag  # noqa: E402  (ratio 派生唯一来源)
+
 INDEX_JSON = "index.json"
 INDEX_CSV = "index.csv"
 README_MD = "README.md"
@@ -43,7 +55,8 @@ TABLE_END = "<!-- registry-table:end -->"
 CSV_FIELDS = ["run_number", "run_id", "replay_sample_seed", "status", "started_at",
               "completed_at", "MAA", "BWT", "result_directory", "code_commit",
               "data_revision", "model_config_hash", "config_hash", "error_summary",
-              "registration_commit", "result_commit"]
+              "registration_commit", "result_commit", "ratio", "ratio_tag",
+              "paired_with_run_id"]
 ALLOWED_STATUS = ("RUNNING", "COMPLETE", "FAILED")
 
 
@@ -76,16 +89,54 @@ def load_index(docdir):
     return json.load(open(p, encoding="utf-8"))
 
 
+def load_series_meta(docdir):
+    """读 index.json 顶部元数据并校验（ratio 通用化：禁写死 ratio/tag/结果根目录）。
+
+    返回 (index, ratio_tag)。任何缺失/不一致 → SystemExit（非零退出，绝不默认补值）。
+    """
+    idx = load_index(docdir)
+    missing = [k for k in ("ratio", "ratio_tag", "sample_mode", "result_directory_root")
+               if idx.get(k) in (None, "")]
+    if missing:
+        raise SystemExit(
+            f"{os.path.join(docdir, INDEX_JSON)} 缺系列元数据 {missing}——registry 从元数据"
+            "读取 ratio/ratio_tag/结果根目录（不写死 r001）；请在 index.json 顶部补齐")
+    if idx["sample_mode"] != "random":
+        raise SystemExit(f"index.sample_mode={idx['sample_mode']!r} 不是 random——"
+                         "本工具只服务 random 抽样系列")
+    try:
+        tag = ratio_tag(idx["ratio"])
+    except ValueError as e:
+        raise SystemExit(f"index.json 系列元数据非法：{e}")
+    if idx["ratio_tag"] != tag:
+        raise SystemExit(f"index ratio_tag={idx['ratio_tag']!r} 与 ratio={idx['ratio']!r} "
+                         f"派生的 tag {tag!r} 不一致（tag 必须由 ratio 派生，禁手工填）")
+    expect_root = f"results/CoIN_Replay_random/{tag}"
+    if idx["result_directory_root"].rstrip("/") != expect_root:
+        raise SystemExit(f"index result_directory_root={idx['result_directory_root']!r} "
+                         f"与 ratio 派生布局 {expect_root!r} 不一致")
+    return idx, tag
+
+
+def _csv_row(r, tag):
+    row = dict(r)
+    row["ratio_tag"] = r.get("ratio_tag", tag)
+    pw = r.get("paired_with") or {}
+    row["paired_with_run_id"] = pw.get("run_id") if isinstance(pw, dict) else pw
+    return row
+
+
 def write_index(docdir, idx):
     atomic_write(os.path.join(docdir, INDEX_JSON), idx)
     # CSV 原子写（tmp + flush + fsync + os.replace）
     csv_path = os.path.join(docdir, INDEX_CSV)
     tmp = csv_path + ".tmp"
+    tag = idx.get("ratio_tag", "")
     with open(tmp, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
         w.writeheader()
         for r in idx["runs"]:
-            w.writerow(r)
+            w.writerow(_csv_row(r, tag))
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, csv_path)
@@ -108,7 +159,7 @@ def write_index(docdir, idx):
 
 
 def cmd_register(docdir, args):
-    idx = load_index(docdir)
+    idx, tag = load_series_meta(docdir)
     runs = idx["runs"]
     used_seeds = {r["replay_sample_seed"] for r in runs}
     run_number = (max((r["run_number"] for r in runs), default=0)) + 1
@@ -119,11 +170,36 @@ def cmd_register(docdir, args):
             if cand not in used_seeds:
                 seed = cand
                 break
+    # 同 ratio（同一 index）内禁止复用 seed；不同 ratio 是独立 index，允许同 seed 配对
     if seed in used_seeds:
-        raise SystemExit(f"seed {seed} 已在注册表中使用（禁止复用）")
+        raise SystemExit(f"seed {seed} 已在注册表中使用（同一 ratio 内禁止复用；"
+                         "跨 ratio 同 seed 配对请用另一个系列的 index 目录）")
     run_id = f"run_{run_number:04d}_seed_{seed}"
     if any(r["run_id"] == run_id for r in runs):
         raise SystemExit(f"{run_id} 已存在")
+    # 可选：登记与另一 ratio 系列的同 seed 配对（必须同 seed 的真 run，禁按 run_number 猜测）
+    paired = None
+    if args.paired_with:
+        if not args.paired_index:
+            raise SystemExit("--paired-with 必须同时给 --paired-index"
+                             "（另一 ratio 系列的 index.json 路径）")
+        if not os.path.isfile(args.paired_index):
+            raise SystemExit(f"配对 index 不存在: {args.paired_index}")
+        pidx = json.load(open(args.paired_index, encoding="utf-8"))
+        matches = [r for r in pidx.get("runs", []) if r.get("run_id") == args.paired_with]
+        if len(matches) != 1:
+            raise SystemExit(f"配对系列中找不到唯一的 run {args.paired_with}"
+                             f"（命中 {len(matches)} 条）")
+        pr = matches[0]
+        if pr.get("replay_sample_seed") != seed:
+            raise SystemExit(f"配对必须同 seed：{args.paired_with} 的 seed="
+                             f"{pr.get('replay_sample_seed')} != 本 run seed={seed}")
+        ptag = pidx.get("ratio_tag") or ratio_tag(pidx.get("ratio"))
+        if ptag == tag:
+            raise SystemExit(f"配对必须跨 ratio（本系列 tag={tag}，配对系列 tag={ptag}）")
+        paired = {"ratio_tag": ptag, "run_id": pr["run_id"],
+                  "replay_sample_seed": pr["replay_sample_seed"],
+                  "status_at_registration": pr.get("status")}
     entry = {
         "run_number": run_number,
         "run_id": run_id,
@@ -133,7 +209,9 @@ def cmd_register(docdir, args):
         "completed_at": None,
         "MAA": None,
         "BWT": None,
-        "result_directory": f"results/CoIN_Replay_random/r001/{run_id}",
+        "ratio": float(normalize_ratio(idx["ratio"])),
+        "ratio_tag": tag,
+        "result_directory": f"{idx['result_directory_root'].rstrip('/')}/{run_id}",
         "code_commit": None,
         "data_revision": None,
         "model_config_hash": None,
@@ -141,6 +219,7 @@ def cmd_register(docdir, args):
         "error_summary": None,
         "registration_commit": None,
         "result_commit": None,
+        "paired_with": paired,
     }
     runs.append(entry)
     write_index(docdir, idx)
@@ -157,6 +236,11 @@ def _fill_from_summary(entry, summary_path):
                          "文件放错 run 目录？")
     if s.get("MAA") is None or s.get("BWT") is None:
         raise SystemExit("summary.json 缺 MAA/BWT（COMPLETE 必须先 assemble + 验收通过）")
+    # 跨 ratio 混用防护：summary 的 ratio 必须与本系列登记 ratio 一致
+    if s.get("ratio") is not None and entry.get("ratio") is not None:
+        if normalize_ratio(s["ratio"]) != normalize_ratio(entry["ratio"]):
+            raise SystemExit(f"summary ratio={s['ratio']} != 本系列 ratio={entry['ratio']}"
+                             "——禁止把其它 ratio 的产物计入本系列")
     entry["MAA"] = s["MAA"]
     entry["BWT"] = s["BWT"]
     entry["result_directory"] = s.get("result_directory_rel") or entry["result_directory"]
@@ -176,12 +260,16 @@ def cmd_complete(docdir, args):
                          "git log --grep <run_id> 反查）")
     if args.status == "COMPLETE" and not args.result_commit:
         raise SystemExit("COMPLETE 必须提供 --result-commit（协议 C 的真实 hash）")
-    idx = load_index(docdir)
+    idx, tag = load_series_meta(docdir)
     for r in idx["runs"]:
         if r["run_id"] != args.run_id:
             continue
         if r["status"] != "RUNNING":
             raise SystemExit(f"{args.run_id} 当前状态 {r['status']}——只有 RUNNING 可完结")
+        root = idx["result_directory_root"].rstrip("/")
+        if not str(r.get("result_directory", "")).startswith(root + "/"):
+            raise SystemExit(f"{args.run_id} 的 result_directory={r.get('result_directory')!r} "
+                             f"不属于本系列 {root}（index 元数据被改动？拒绝完结）")
         r["completed_at"] = args.completed_at or now_iso()
         if args.status == "COMPLETE":
             if args.summary:
@@ -223,11 +311,16 @@ def cmd_list(docdir, args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("docdir",
-                    help="docs/experiments/coin_replay_random_r001 目录（含 index.json）")
+                    help="系列注册表目录（含 index.json），如 "
+                         "docs/experiments/coin_replay_random_r010")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p_reg = sub.add_parser("register")
     p_reg.add_argument("--seed", type=int, default=None, help="固定 seed（默认 SystemRandom 31-bit）")
     p_reg.add_argument("--started-at", default=None)
+    p_reg.add_argument("--paired-with", default=None,
+                       help="另一 ratio 系列中同 seed 的 run_id（配对登记；须同 seed）")
+    p_reg.add_argument("--paired-index", default=None,
+                       help="另一 ratio 系列的 index.json 路径（与 --paired-with 同时给）")
     p_reg.set_defaults(fn=cmd_register)
     p_com = sub.add_parser("complete")
     p_com.add_argument("--run-id", required=True)

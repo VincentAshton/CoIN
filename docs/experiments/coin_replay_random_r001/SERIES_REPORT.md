@@ -1,6 +1,8 @@
-# CoIN + Replay「随机 replay 抽样」系列 r001 —— 五次独立运行报告
+# CoIN + Replay「随机 replay 抽样」系列 r001（ratio=0.01）—— 首批五次运行分析快照
 
-> 状态：**5/5 COMPLETE**（2026-09-09 ~ 2026-09-10）
+> 状态：**当前 5 个 COMPLETE、0 个 RUNNING（2026-09-09 ~ 2026-09-10 的首批五次运行）**
+> **本文档是版本化快照，不表示实验系列永久结束**：系列开放，可继续追加运行；
+> 后续新增运行将在 [README.md](README.md) 的状态表与 index.json 中累积，本快照不随新运行改写。
 > **审核结论：实验数据与证据链通过；本文档已完成科学表述与统计口径修订。**
 > 本报告为文档层汇总（docs-only）。所有指标数值以各 run 已发布的 `coin_metrics.json`
 > 的原始 `A_matrix` 浮点值为计算基准；`summary.json` 中本身已按 4 位发布的指标按其发布精度展示。
@@ -71,7 +73,7 @@ diagonal_mean       = (1/T) · Σ(i=1..T) A_{i,i}
 
 ## 4. 执行纪律（防止结果被人为筛选）
 
-- 累计 **5 个 COMPLETE 后停止**，不注册第 6 个；全部运行公开（RUNNING/FAILED/COMPLETE 永久保留）
+- **不设固定总运行次数**（系列开放）；全部运行公开（RUNNING/FAILED/COMPLETE 永久保留）
 - **禁止以指标（MAA/BWT）为导向停止或隐藏结果**；seed 不得因结果重新生成
 - registry「A/C/D」提交协议：A=注册 RUNNING 提交、C=六件套发布提交、D=registry COMPLETE 提交
   （hash 反查自 git log，禁伪造）

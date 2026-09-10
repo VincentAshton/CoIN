@@ -141,22 +141,28 @@ class TestOrchestratorDryRun(unittest.TestCase):
         # 旧结果不能被误用：round2 的 TextVQA 无产物
         self.assertFalse(os.path.isdir(os.path.join(self.res, "TextVQA", "round2")))
 
-    # ---- random-replay 系列（2026-09-08）：编排层 plumbing + 启动门 ------------
+    # ---- random-replay 系列（ratio 通用）：编排层 plumbing + 启动门 ------------
 
-    def _run_dirs(self, run_id):
-        """random-r001 gate 合规的 per-run 目录（pattern: <root>/CoIN_Replay_random/r001/<rid>）。"""
-        base = os.path.join(self.tmp, "run_root", run_id)
-        return (os.path.join(base, "checkpoints", "CoIN_Replay_random", "r001", run_id),
-                os.path.join(base, "results", "CoIN_Replay_random", "r001", run_id),
-                os.path.join(base, "playground", "Replay_random", "r001", run_id))
+    def _run_dirs(self, run_id, tag="r001"):
+        """random gate 合规的 per-run 目录（pattern: <root>/CoIN_Replay_random/<tag>/<rid>）。"""
+        base = os.path.join(self.tmp, "run_root", tag, run_id)
+        return (os.path.join(base, "checkpoints", "CoIN_Replay_random", tag, run_id),
+                os.path.join(base, "results", "CoIN_Replay_random", tag, run_id),
+                os.path.join(base, "playground", "Replay_random", tag, run_id))
 
     def _big_data(self):
         """random 系列 ratio=0.01 需要 floor(N*0.01)>=1 → N>=100。"""
         build_synthetic(self.data_dir, self.img_dir, "ScienceQA", 120)
         build_synthetic(self.data_dir, self.img_dir, "TextVQA", 120)
 
+    def _four_task_data(self, n=120):
+        """random 0.10 四轮 DRY_RUN 用：四任务合成数据 + 评估辅助文件。"""
+        for task in ("ScienceQA", "TextVQA", "ImageNet", "GQA"):
+            build_synthetic(self.data_dir, self.img_dir, task, n)
+            make_aux(self.img_dir, task)
+
     def test_random_mode_plumbing_dryrun(self):
-        """SAMPLE_MODE=random + REPLAY_SAMPLE_SEED + RANDOM_REPLAY_RUN_ID 全链路。"""
+        """SAMPLE_MODE=random + REPLAY_SAMPLE_SEED + RANDOM_REPLAY_RUN_ID 全链路（r001）。"""
         import hashlib
         self._big_data()
         rid = "run_0000_seed_424242"
@@ -166,7 +172,8 @@ class TestOrchestratorDryRun(unittest.TestCase):
                       REPLAY_ACCUM="1",
                       CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
         self.assertEqual(r.returncode, 0, f"STDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}")
-        self.assertIn("random-r001 gate PASS", r.stdout)
+        self.assertIn("random-replay gate PASS", r.stdout)
+        self.assertIn("tag=r001", r.stdout)
         # run manifest：config 记录 mode/seed/run id（config hash 一部分）
         man = json.load(open(os.path.join(res, "run_manifest.json")))
         self.assertEqual(man["config"]["sample_mode"], "random")
@@ -182,11 +189,44 @@ class TestOrchestratorDryRun(unittest.TestCase):
         e = m["sources"]["ScienceQA"]
         self.assertEqual(e["task_seed"],
                          hashlib.sha256(b"424242:ScienceQA").hexdigest())
-        # floor(12*0.1)=1：选中 1 条（具体哪条由 seed 决定）
+        # floor(120*0.01)=1：选中 1 条（具体哪条由 seed 决定）
         self.assertEqual(e["k"], 1)
         self.assertEqual(len(e["selected_indices"]), 1)
         data = json.load(open(os.path.join(replay, "round2_train.json")))
         self.assertEqual(len(data), 1)
+
+    def test_random_r010_four_round_dryrun(self):
+        """ratio=0.10（tag r010）四任务四轮 DRY_RUN 全链路（新比例主路径）。"""
+        self._four_task_data()
+        rid = "run_0000_seed_424242"
+        ckpt, res, replay = self._run_dirs(rid, tag="r010")
+        r = self._run("0.1", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="424242",
+                      RANDOM_REPLAY_RUN_ID=rid, REPLAY_ACCUM="1",
+                      TASKS_JSON='["ScienceQA","TextVQA","ImageNet","GQA"]',
+                      CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
+        self.assertEqual(r.returncode, 0, f"STDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}")
+        self.assertIn("random-replay gate PASS", r.stdout)
+        self.assertIn("tag=r010", r.stdout)
+        self.assertTrue(os.path.isfile(os.path.join(res, ".complete")))
+        man = json.load(open(os.path.join(res, "run_manifest.json")))
+        self.assertAlmostEqual(man["config"]["ratio"], 0.1)
+        # 四轮 replay 数据 + sidecar（k = floor(120*0.1)=12/任务）
+        for j in (2, 3, 4):
+            rj = os.path.join(replay, f"round{j}_train.json")
+            self.assertTrue(os.path.isfile(rj), rj)
+            m = json.load(open(rj + ".manifest.json"))
+            self.assertEqual(m["mode"], "random")
+            self.assertEqual(len(m["sources"]), j - 1)
+            for task, e in m["sources"].items():
+                self.assertEqual(e["k"], 12, f"round{j}/{task}")
+            self.assertEqual(m["output"]["N"], 12 * (j - 1))
+        # 四轮 checkpoint 链
+        for j in (1, 2, 3, 4):
+            self.assertTrue(os.path.isdir(
+                os.path.join(ckpt, f"round{j}_task_llava_lora")))
+            if j > 1:
+                self.assertTrue(os.path.isdir(
+                    os.path.join(ckpt, f"round{j}_replay_llava_lora")))
 
     def test_random_gate_bad_seed_fails_fast(self):
         """启动门：seed 非法 → preflight/训练之前即失败（无 manifest、无 preflight 报告）。"""
@@ -198,7 +238,7 @@ class TestOrchestratorDryRun(unittest.TestCase):
                       CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
         self.assertNotEqual(r.returncode, 0)
         out = r.stdout + r.stderr
-        self.assertIn("FAIL(random-r001 gate)", out)
+        self.assertIn("FAIL(random-replay gate)", out)
         self.assertIn("REPLAY_SAMPLE_SEED", out)
         self.assertNotIn("运行数据 preflight", out, "门失败后不得进入 preflight")
         self.assertFalse(os.path.exists(os.path.join(res, "run_manifest.json")))
@@ -215,8 +255,38 @@ class TestOrchestratorDryRun(unittest.TestCase):
                       CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
         self.assertNotEqual(r.returncode, 0)
         out = r.stdout + r.stderr
-        self.assertIn("FAIL(random-r001 gate)", out)
+        self.assertIn("FAIL(random-replay gate)", out)
         self.assertIn("目录必须属于", out)
+
+    def test_random_gate_ratio_tag_mismatch_fails_fast(self):
+        """启动门：ratio=0.10 却给了 r001 目录（tag 不一致）→ preflight 之前失败。"""
+        self._four_task_data()
+        rid = "run_0000_seed_424242"
+        ckpt, res, replay = self._run_dirs(rid, tag="r001")  # 错误 tag
+        r = self._run("0.1", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="424242",
+                      RANDOM_REPLAY_RUN_ID=rid, REPLAY_ACCUM="1",
+                      CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
+        self.assertNotEqual(r.returncode, 0)
+        out = r.stdout + r.stderr
+        self.assertIn("FAIL(random-replay gate)", out)
+        self.assertIn("r010", out)
+        self.assertIn("目录必须属于", out)
+        self.assertNotIn("运行数据 preflight", out)
+        self.assertFalse(os.path.exists(os.path.join(res, "run_manifest.json")))
+
+    def test_random_gate_disallowed_ratio_fails_fast(self):
+        """启动门：ratio 不在允许集合（0.01/0.10）→ 数值归一化判定失败。"""
+        self._big_data()
+        rid = "run_0000_seed_424242"
+        ckpt, res, replay = self._run_dirs(rid)
+        r = self._run("0.05", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="424242",
+                      RANDOM_REPLAY_RUN_ID=rid, REPLAY_ACCUM="1",
+                      CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
+        self.assertNotEqual(r.returncode, 0)
+        out = r.stdout + r.stderr
+        self.assertIn("RATIO 非法", out)
+        self.assertIn("只允许 0.01 与 0.10", out)
+        self.assertNotIn("运行数据 preflight", out)
 
     def test_resume_replay_sample_seed_mismatch_fails(self):
         self._big_data()
@@ -237,6 +307,25 @@ class TestOrchestratorDryRun(unittest.TestCase):
         out = r2.stdout + r2.stderr
         self.assertIn("config hash", out)
         self.assertIn("replay_sample_seed", out)  # 语义差异字段显式指出
+
+    def test_resume_r010_ratio_mismatch_rejected(self):
+        """r010 run 的正式目录被 0.01 配置重跑 → 拒绝（manifest config hash 或 gate 拦下）。"""
+        self._four_task_data()
+        rid = "run_0000_seed_333"
+        ckpt, res, replay = self._run_dirs(rid, tag="r010")
+        r1 = self._run("0.1", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="333",
+                       RANDOM_REPLAY_RUN_ID=rid, REPLAY_ACCUM="1",
+                       TASKS_JSON='["ScienceQA","TextVQA","ImageNet","GQA"]',
+                       CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
+        self.assertEqual(r1.returncode, 0, r1.stderr)
+        r2 = self._run("0.01", SAMPLE_MODE="random", REPLAY_SAMPLE_SEED="333",
+                       RANDOM_REPLAY_RUN_ID=rid, REPLAY_ACCUM="1",
+                       CKPT_ROOT=ckpt, RES_ROOT=res, REPLAY_DATA_DIR=replay)
+        self.assertNotEqual(r2.returncode, 0)
+        out = r2.stdout + r2.stderr
+        self.assertIn("config hash", out)
+        self.assertIn("ratio", out)   # 语义差异字段里指出 ratio（0.1 vs 0.01）
+        self.assertIn("禁止覆盖", out)
 
 
 if __name__ == "__main__":

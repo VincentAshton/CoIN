@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import time
+from decimal import Decimal, InvalidOperation
 
 ACC_TEXT_RE = re.compile(r"Accuracy:\s*([\d.]+)%")
 
@@ -456,6 +457,67 @@ def artifact_check(task: str, stage_dir: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# random-replay ratio 通用化（2026-09-11）
+#
+# 单一来源：ratio 归一化 / ratio tag / 三目录布局只在本节实现。gate（run_replay_exp.sh）、
+# finalize、registry、配对工具全部调用这里，禁止各自硬编码 "r001" 或 0.01——否则操作者
+# 需要同时手填 ratio 与 tag，必然出现不一致。
+# ---------------------------------------------------------------------------
+
+# 正式 random 系列只允许这两个回放比例（数值集合；输入 "0.1" / "0.10" / 0.01 均合法）
+ALLOWED_RANDOM_RATIOS = (Decimal("0.01"), Decimal("0.10"))
+
+
+def normalize_ratio(value) -> Decimal:
+    """把 ratio 表示（str/float/int，如 "0.1"/"0.10"/0.01）规范化为允许集合中的 Decimal。
+
+    判定用数值比较（Decimal(str(v))），不做字符串比较——"0.1"、"0.10"、0.10 等价。
+    不在允许集合 → ValueError（调用方必须非零退出）。
+    """
+    if isinstance(value, str):
+        s = value.strip()
+    elif isinstance(value, (int, float, Decimal)):
+        s = str(value)
+    else:
+        raise ValueError(f"ratio 非法（类型 {type(value).__name__}）: {value!r}")
+    try:
+        d = Decimal(s)
+    except (InvalidOperation, ArithmeticError, ValueError):
+        raise ValueError(f"ratio 非法（无法解析为数值）: {value!r}")
+    if not d.is_finite():
+        raise ValueError(f"ratio 非法（非有限数值）: {value!r}")
+    for allowed in ALLOWED_RANDOM_RATIOS:
+        if d == allowed:
+            return allowed
+    raise ValueError(
+        f"ratio {value!r} 不在 random 系列允许集合 "
+        f"{[str(a) for a in ALLOWED_RANDOM_RATIOS]}（只允许 0.01 与 0.10）")
+
+
+def ratio_tag(value) -> str:
+    """由 ratio 数值派生 ratio tag：0.01→r001、0.10→r010（禁手工填 tag）。"""
+    r = normalize_ratio(value)
+    return "r%03d" % int((r * 100).to_integral_value())
+
+
+def random_ratio_layout(value, run_id: str) -> dict:
+    """三个正式目录的相对路径（tag 由 ratio 派生；不允许调用方另传 tag）。
+
+    ratio=0.01: checkpoints|results/CoIN_Replay_random/r001/<run_id>、
+                playground/Replay_random/r001/<run_id>
+    ratio=0.10: 同布局，tag=r010
+    """
+    tag = ratio_tag(value)
+    return {
+        "ratio": str(normalize_ratio(value)),
+        "ratio_tag": tag,
+        "ckpt_root": f"checkpoints/CoIN_Replay_random/{tag}/{run_id}",
+        "res_root": f"results/CoIN_Replay_random/{tag}/{run_id}",
+        "replay_data_dir": f"playground/Replay_random/{tag}/{run_id}",
+    }
+
+
+# ---------------------------------------------------------------------------
 # manifest（工单 6）
 # ---------------------------------------------------------------------------
 
@@ -730,6 +792,23 @@ def main():
         rep = manifest_cross_check(a["--res-root-a"], a["--res-root-b"])
         print(json.dumps(rep, ensure_ascii=False))
         sys.exit(0 if rep["pass"] else 1)
+    elif cmd == "ratio-tag":
+        # random 系列 ratio → tag（唯一来源；非法 ratio 非零退出，供 gate fail-fast）
+        try:
+            print(ratio_tag(sys.argv[2]))
+        except (ValueError, IndexError) as e:
+            print(f"ERROR: {e if isinstance(e, ValueError) else '用法: coin_lib.py ratio-tag <ratio>'}", file=sys.stderr)
+            sys.exit(2)
+    elif cmd == "ratio-layout":
+        # random 系列 ratio → 三目录布局 JSON（tag 由 ratio 派生，禁手工填）
+        try:
+            print(json.dumps(random_ratio_layout(sys.argv[2], sys.argv[3]), ensure_ascii=False))
+        except IndexError:
+            print("ERROR: 用法: coin_lib.py ratio-layout <ratio> <run_id>", file=sys.stderr)
+            sys.exit(2)
+        except ValueError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            sys.exit(2)
     else:
         raise SystemExit(f"未知命令: {cmd}")
 

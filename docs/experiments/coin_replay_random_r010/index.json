@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "series": "CoIN+Replay random replay 抽样系列 r010（ratio=0.10）：SAMPLE_MODE=random、RATIO=0.10、REPLAY_ACCUM=1、SEED=1234、DATA_SEED=1234，每次只变 REPLAY_SAMPLE_SEED；与 r001（ratio=0.01）构成同 seed、嵌套样本（0.01 ⊆ 0.10）的比例对照",
+  "ratio": 0.1,
+  "ratio_tag": "r010",
+  "sample_mode": "random",
+  "result_directory_root": "results/CoIN_Replay_random/r010",
+  "paired_series_dir": "docs/experiments/coin_replay_random_r001",
+  "baselines": {
+    "prefix_0.10": {
+      "label": "prefix ratio=0.10 (2026-09-04)",
+      "MAA": 57.5057,
+      "BWT": 17.2306,
+      "final_avg": 55.7834,
+      "source": "results/coin-replay-r010-20260904 分支 docs/experiments/coin_replay/ratio_0.10/coin_metrics.json"
+    },
+    "prefix_0.01": {
+      "label": "prefix ratio=0.01 (2026-09-05)",
+      "MAA": 60.4406,
+      "BWT": -13.6299,
+      "final_avg": 46.1925,
+      "source": "results/coin-replay-r010-20260904 分支 docs/experiments/coin_replay/ratio_0.01/coin_metrics.json"
+    }
+  },
+  "runs": []
+}

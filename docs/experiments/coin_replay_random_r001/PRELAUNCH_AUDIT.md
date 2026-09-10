@@ -5,6 +5,14 @@ seed / 结果**（index.json runs=[] 必须保持）。
 
 ## 阶段 A（零 GPU 静态审计与加固）—— 2026-09-08
 
+> **历史文档注记（2026-09-11，ratio 通用化）**：本文记录的是 r001 专用门（`random_r001_gate`）
+> 在 commit 16f27d4 时期的审计快照，其 PASS 证据与日志措辞（`FAIL(random-r001 gate)`）保持原样不改写。
+> 自分支 `codex/coin-replay-random` 起，该门已泛化为 **`random_replay_gate`**：ratio 属于
+> {0.01, 0.10}（数值归一化判定）、ratio tag 由 ratio 派生（r001/r010）并与三个目录精确匹配，
+> 报错前缀统一为 `FAIL(random-replay gate)`；上述 A2–A5 各项检查内容不变，仅解除 0.01 写死。
+> 新实现的等价性与回归测试见 `tests/test_random_ratio_generalization.py` 与
+> `tests/test_orchestrator_dryrun.py`（r001 与 r010 双路径）。
+
 - 审计前 commit：22c6ad9f61386a49a65623a77484ad0711ce5ed4（工作树 clean；
   远端 codex 分支无后续提交）
 - 审计 commit：见本目录 git 记录（AUDITED_COMMIT 在阶段 A 完成后回填）
@@ -15,7 +23,7 @@ seed / 结果**（index.json runs=[] 必须保持）。
 | # | 项目 | 实现位置 | 状态 |
 |---|------|---------|------|
 | A1 | legacy 测试固定父提交 + 防自比较断言（源 SHA ≠ 当前实现） | tests/test_random_replay_selection.py | PASS |
-| A2 | 启动 fail-fast 门（mode/ratio/seed 31-bit/REPLAY_ACCUM/run ID/三目录/port/GPU） | run_replay_exp.sh random_r001_gate | PASS |
+| A2 | 启动 fail-fast 门（mode/ratio/seed 31-bit/REPLAY_ACCUM/run ID/三目录/port/GPU） | run_replay_exp.sh `random_r001_gate` | PASS（该实现名为历史名；2026-09-11 已泛化为 `random_replay_gate`，见下注） |
 | A3 | run ID 进 manifest/config hash/resume 校验 | coin_lib.compute_config + CONFIG_FIELDS | PASS |
 | A4 | registry complete 禁 RUNNING；csv 原子写；A/C/D 协议强制 | tools/random_replay_registry.py | PASS |
 | A5 | finalize staging + 原子换入；sampling_algorithm 常量门；源数据独立重建门；敏感扫描；--test-mode | tools/random_replay_finalize.py | PASS |

@@ -1,9 +1,15 @@
-# Random Replay ratio=0.01 —— completed series（已完成实验系列）
+# Random Replay ratio=0.01 —— 系列 r001（开放式系列）
+
+> ratio tag：**r001**（由 ratio 数值派生）。系列总入口：
+> [docs/experiments/coin_replay_random/README.md](../coin_replay_random/README.md)；
+> 同为 random 比例主比较的另一组为 [ratio=0.10 系列 r010](../coin_replay_random_r010/README.md)。
+> 长度不限：系列开放，可继续追加运行（不设固定总次数）。
 
 长期实验系列：**ratio=0.01 随机 replay 样本选择**（固定 SAMPLE_MODE=random、
 RATIO=0.01、REPLAY_ACCUM=1、SEED=1234、DATA_SEED=1234；每次只变
 REPLAY_SAMPLE_SEED）。基线分支 `experiment/coin-replay-presweep-20260903`；
-本系列长期分支 **`codex/coin-replay-random-r001`**（不按 seed 建分支）。
+本系列的长期维护分支已并入 **`codex/coin-replay-random`**（同一分支同时维护
+0.01 / 0.10 与配对比较）；历史快照分支 `codex/coin-replay-random-r001` 冻结保留。
 
 ## 运行纪律（单次运行）
 
@@ -15,8 +21,7 @@ REPLAY_SAMPLE_SEED）。基线分支 `experiment/coin-replay-presweep-20260903`�
   判断进度，同 seed 同目录恢复；语义性改动（算法/超参/数据/模型/任务序/ratio/指标）
   必须另开 r002 系列。
 - index 只追加或 RUNNING → COMPLETE/FAILED；失败记录保留；run_number 单调递增。
-- **系列公开规则（run_0001 起，2026-09-09）**：本系列累计 **5 个 COMPLETE 后停止**，
-  不注册第 6 个；replay sample seed 一律由 registry 在启动前以 SystemRandom **即时生成**
+- **系列公开规则**：**不设固定总运行次数**（系列开放，可继续追加）；replay sample seed 一律由 registry 在启动前以 SystemRandom **即时生成**
   （禁止人工指定/筛选/复用）；**全部运行公开**——RUNNING/FAILED/COMPLETE 记录永久保留，
   不隐藏不删除；**禁止以指标（MAA/BWT）为导向停止或隐藏结果**；失败按技术原因记 FAILED。
 - **启动姿势（2026-09-08 审计加固）**：正式 random 运行必须显式提供
@@ -94,9 +99,10 @@ started_at/completed_at/result_directory/code_commit/config_hash/error_summary/
 registration_commit/result_commit 全字段 + prefix 基线数值。）
 
 **📄 五次独立运行汇总报告：[SERIES_REPORT.md](SERIES_REPORT.md)**
-—— **5/5 COMPLETE；系列汇总报告已完成文档审核修订。**（目的/设计/抽样算法/执行纪律/
-五次运行 A 矩阵与指标/统计分布与中位数/相对基线描述性差值/工程事件与恢复/证据索引/局限/
-审核问题清单，2026-09-10 修订；系列累计 5 个 COMPLETE 已达成，按规则停止）
+—— **截至 2026-09-10 的首批五次运行分析快照（版本化快照；不表示实验系列永久结束）。**
+（目的/设计/抽样算法/执行纪律/五次运行 A 矩阵与指标/统计分布与中位数/相对基线描述性差值/
+工程事件与恢复/证据索引/局限/审核问题清单，2026-09-10 修订；系列当前 5 个 COMPLETE、
+0 个 RUNNING，可继续追加）
 
 ## 对照基线（prefix 系列，results/coin-replay-r010-20260904 分支）
 

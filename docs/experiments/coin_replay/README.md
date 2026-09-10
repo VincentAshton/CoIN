@@ -110,3 +110,13 @@ docs/experiments/coin_replay/
     checkpoint_inventory.json      两组 7 checkpoint 逐路径组件/SHA256 清单
     imagenet_round3_diagnostic.md  ImageNet round3=4.02 只读诊断（0.10）
 ```
+
+## 相关
+
+- **Random Replay ratio=0.01 系列**（五次独立运行，5/5 COMPLETE，2026-09-09~10）：
+  `codex/coin-replay-random-r001` 分支 `docs/experiments/coin_replay_random_r001/`
+  （`SERIES_REPORT.md` 汇总报告 + registry + 五次运行六件套）
+- **运行代码（实验经过锁定）**：`experiment/coin-replay-presweep-20260903` 分支
+  （prefix 双 ratio 运行代码 + `REPRODUCE.md`）；random 系列运行代码见
+  `codex/coin-replay-random-r001` 分支（commit `16f27d4`）
+- 本分支（`results/coin-replay-r010-20260904`）**不携带运行代码**，仅存结果与验收证据

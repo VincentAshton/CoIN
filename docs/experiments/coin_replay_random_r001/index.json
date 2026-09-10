@@ -76,19 +76,19 @@
       "run_number": 4,
       "run_id": "run_0004_seed_1212218766",
       "replay_sample_seed": 1212218766,
-      "status": "RUNNING",
+      "status": "COMPLETE",
       "started_at": "2026-09-10T02:38:50+08:00",
-      "completed_at": null,
-      "MAA": null,
-      "BWT": null,
+      "completed_at": "2026-09-10T14:08:01+08:00",
+      "MAA": 63.696,
+      "BWT": 6.5542,
       "result_directory": "results/CoIN_Replay_random/r001/run_0004_seed_1212218766",
-      "code_commit": null,
-      "data_revision": null,
-      "model_config_hash": null,
-      "config_hash": null,
+      "code_commit": "16f27d4469b07225bdcf820e43bac915809e4bbd",
+      "data_revision": "bf6bd4ee1883c6eb9b94a2bd0544d0b12e90f5d72d8a4d604791a3842516196d",
+      "model_config_hash": "5fe5a4b3d741e11a1237597d68f3803b759d79d9bafbf840ef14afab480f2b29",
+      "config_hash": "d2979e5ed045800ea2383ea1c39f4b44aecdadccb0f471212c14f9e9b24cccef",
       "error_summary": null,
-      "registration_commit": null,
-      "result_commit": null
+      "registration_commit": "095392b4b93dc3b0919aff0e76bed628e1085f14",
+      "result_commit": "d31d8b67f6dc1f76a533b5d5b970a699b3af445a"
     }
   ]
 }

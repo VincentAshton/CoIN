@@ -29,8 +29,9 @@
 | **CoIN**（默认） | 入口页 + 上游代码 | [GitHub 首页](https://github.com/VincentAshton/CoIN) |
 | `experiment/coin-replay-presweep-20260903` | **运行代码（锁定）+ 工具/测试 + 复现手册** | 本分支（当前） |
 | `results/coin-replay-r010-20260904` | **正式结果**（双 ratio 矩阵/验收/对比分析） | [点此](https://github.com/VincentAshton/CoIN/tree/results/coin-replay-r010-20260904/docs/experiments/coin_replay) |
+| `codex/coin-replay-random-r001` | **random replay 抽样系列**（固定 ratio=0.01，五次独立运行；运行代码 + registry + 结果发布） | [SERIES_REPORT.md 汇总报告](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random-r001/docs/experiments/coin_replay_random_r001/SERIES_REPORT.md) |
 
-## 当前状态（2026-09-05）
+## 当前状态（2026-09-10）
 
 - **ratio=0.10：COMPLETE** —— MAA=57.5057，CoIN BWT=+17.2306，final avg=55.7834
 - **ratio=0.01：COMPLETE** —— MAA=60.4406，CoIN BWT=−13.6299，final avg=46.1925
@@ -39,6 +40,10 @@
 - 运行代码锁定 commit：`17cfa66`（= 069b608，experiment 分支代码自此后未变）
 - 已知方法行为：replay 不含当前任务 → 新学任务被回放干扰（0.10 round3 ImageNet 初学
   96.93% → replay 后 4.02 → round4 恢复 55.19），诊断见结果分支 analysis/
+- **random 抽样系列（固定 ratio=0.01，五次独立运行，2026-09-09~10）：5/5 COMPLETE** ——
+  MAA 61.9287 ± 1.3164、CoIN BWT +11.3442 ± 5.0428、final_avg 62.0781 ± 1.4895
+  （mean ± sample sd，n=5；描述性证据）；运行代码 commit `16f27d4`，详见
+  `codex/coin-replay-random-r001` 分支 README 与 `SERIES_REPORT.md`
 
 ## 快速运行（细节与门禁见 REPRODUCE.md）
 

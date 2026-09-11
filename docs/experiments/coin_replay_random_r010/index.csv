@@ -1,1 +1,2 @@
 run_number,run_id,replay_sample_seed,status,started_at,completed_at,MAA,BWT,result_directory,code_commit,data_revision,model_config_hash,config_hash,error_summary,registration_commit,result_commit,ratio,ratio_tag,paired_with_run_id
+1,run_0001_seed_358341059,358341059,RUNNING,2026-09-11T11:22:40+08:00,,,,results/CoIN_Replay_random/r010/run_0001_seed_358341059,,,,,,,,0.1,r010,run_0001_seed_358341059

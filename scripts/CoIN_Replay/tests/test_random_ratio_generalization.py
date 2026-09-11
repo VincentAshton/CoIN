@@ -328,6 +328,28 @@ class TestNestedCheckTool(unittest.TestCase):
         rep = json.load(open(report))
         self.assertFalse(rep["pass"])
 
+    def test_expect_counts_full_task_table_only_checks_covered_tasks(self):
+        """全任务期望表：各 round 只校验该 round replay 覆盖到的任务（不得误报缺失）。
+
+        round2 的 replay 只含第 1 个任务（ScienceQA），给一张含 TextVQA 的全任务表，
+        期望 TextVQA 在 round2 被跳过（不是失败）。
+        """
+        report = os.path.join(self.tmp, "full_table_report.json")
+        expect = {"0.01": {"tasks": {"ScienceQA": 3, "TextVQA": 5}, "round2": 3, "round3": 8},
+                  "0.10": {"tasks": {"ScienceQA": 30, "TextVQA": 50}, "round2": 30, "round3": 80}}
+        r = run([sys.executable, NESTED, "--data-dir", self.data,
+                 "--image-dir", self.img, "--tasks", "ScienceQA", "TextVQA",
+                 "--seed", "4242", "--tmp-dir", os.path.join(self.tmp, "work3"),
+                 "--out-report", report, "--rounds", "2", "3",
+                 "--expect-counts", json.dumps(expect)])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        rep = json.load(open(report))
+        self.assertTrue(rep["pass"])
+        checked = {(row["ratio"], row["round"]): row["tasks_checked"] for row in rep["rounds"]}
+        self.assertEqual(checked[("0.01", 2)], ["ScienceQA"])
+        self.assertEqual(checked[("0.01", 3)], ["ScienceQA", "TextVQA"])
+        self.assertEqual(checked[("0.10", 3)], ["ScienceQA", "TextVQA"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

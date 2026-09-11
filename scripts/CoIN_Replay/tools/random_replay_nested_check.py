@@ -68,7 +68,12 @@ def build_once(ratio, round_j, seed, data_dir, image_dir, tasks, out_path):
 
 
 def check_counts(ratio, man, expect, row):
-    """k == floor(N*ratio) 校验（逐任务）+ 可选期望值对照。"""
+    """k == floor(N*ratio) 校验（逐任务）+ 可选期望值对照。
+
+    期望值只对**该 round sidecar 里真实存在的任务**生效：历史任务集合随 round 增长
+    （round2 只有第 1 个任务、round3 有前 2 个、round4 有前 3 个），因此调用方可以给
+    一份「全任务表」，各 round 只校验自己覆盖到的任务。
+    """
     ratio_f = float(ratio)
     bad = []
     for task, e in man["sources"].items():
@@ -76,17 +81,18 @@ def check_counts(ratio, man, expect, row):
         if e["k"] != want:
             bad.append(f"{task}: k={e['k']} != floor({e['N']}*{ratio})={want}")
     total = man["output"]["N"]
+    present = set(man["sources"])
     if expect:
         for task, want in (expect.get("tasks") or {}).items():
-            e = man["sources"].get(task)
-            if e is None:
-                bad.append(f"期望任务 {task} 不在 sidecar 中")
-            elif e["k"] != want:
-                bad.append(f"{task}: k={e['k']} != 期望 {want}")
+            if task not in present:
+                continue  # 本 round 的 replay 不含该任务（尚未学到）→ 不适用
+            if man["sources"][task]["k"] != want:
+                bad.append(f"{task}: k={man['sources'][task]['k']} != 期望 {want}")
         for key in ("round2", "round3", "round4"):
             if key in expect and str(man["round"]) == key[-1]:
                 if total != expect[key]:
                     bad.append(f"{key} 总量 {total} != 期望 {expect[key]}")
+    row["tasks_checked"] = sorted(present)
     return total, bad
 
 
@@ -100,7 +106,8 @@ def main():
     ap.add_argument("--out-report", required=True)
     ap.add_argument("--rounds", nargs="+", type=int, default=[2, 3, 4])
     ap.add_argument("--expect-counts", default=None,
-                    help='可选 JSON：{"0.01": {"tasks": {...}, "round2": n, ...}, "0.10": {...}}')
+                    help='可选 JSON：{"0.01": {"tasks": {...}, "round2": n, ...}, "0.10": {...}}；'
+                         'tasks 表按任务名给 k，各 round 只校验该 round replay 覆盖到的任务')
     args = ap.parse_args()
     if not (0 < args.seed < 1 << 31):
         raise SystemExit(f"seed 必须是正 31-bit 整数，收到 {args.seed}")

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-11T02:17:52+08:00",
+  "generated_at": "2026-09-11T22:53:38+08:00",
   "pairing_rule": "seed_intersection",
   "delta_definition": "random-0.10 − random-0.01",
   "delta_definition_note": "高 ratio run − 低 ratio run；两 run 的 replay sample seed 相同",
@@ -117,28 +117,72 @@
       "index": "docs/experiments/coin_replay_random_r010/index.json",
       "ratio": "0.10",
       "ratio_tag": "r010",
-      "n_total": 0,
-      "n_complete": 0,
+      "n_total": 1,
+      "n_complete": 1,
       "n_failed": 0,
       "n_running": 0,
-      "runs": []
+      "runs": [
+        {
+          "series_dir": "docs/experiments/coin_replay_random_r010",
+          "ratio": "0.10",
+          "ratio_tag": "r010",
+          "run_id": "run_0001_seed_358341059",
+          "run_number": 1,
+          "seed": 358341059,
+          "status": "COMPLETE",
+          "MAA": 60.122,
+          "BWT": 28.7287,
+          "final_avg": 66.402,
+          "result_commit": "1cdb09ae3d858a0209e6eea565d4f2226fc3e37b",
+          "code_commit": "41abc5af222ba5eed7c6d25edab4a2bb2d110bcc",
+          "started_at": "2026-09-11T11:22:40+08:00",
+          "completed_at": "2026-09-11T22:53:21+08:00",
+          "error_summary": null,
+          "paired_with": {
+            "ratio_tag": "r001",
+            "run_id": "run_0001_seed_358341059",
+            "replay_sample_seed": 358341059,
+            "status_at_registration": "COMPLETE"
+          },
+          "summary_path": "runs/run_0001_seed_358341059/summary.json"
+        }
+      ]
     }
   ],
-  "pairs": [],
-  "unpaired": [
+  "pairs": [
     {
-      "series": "r001",
-      "ratio": "0.01",
-      "run_id": "run_0001_seed_358341059",
       "seed": 358341059,
-      "status": "COMPLETE",
-      "MAA": 62.853,
-      "BWT": 7.9354,
-      "final_avg": 61.4521,
-      "result_commit": "de8bfcac25bf28f57160e99be5c887c7914cee22",
-      "code_commit": "16f27d4469b07225bdcf820e43bac915809e4bbd",
-      "pairing_label": "UNPAIRED"
-    },
+      "low_ratio": {
+        "ratio": "0.01",
+        "ratio_tag": "r001",
+        "run_id": "run_0001_seed_358341059",
+        "status": "COMPLETE",
+        "result_commit": "de8bfcac25bf28f57160e99be5c887c7914cee22",
+        "code_commit": "16f27d4469b07225bdcf820e43bac915809e4bbd",
+        "MAA": 62.853,
+        "BWT": 7.9354,
+        "final_avg": 61.4521
+      },
+      "high_ratio": {
+        "ratio": "0.10",
+        "ratio_tag": "r010",
+        "run_id": "run_0001_seed_358341059",
+        "status": "COMPLETE",
+        "result_commit": "1cdb09ae3d858a0209e6eea565d4f2226fc3e37b",
+        "code_commit": "41abc5af222ba5eed7c6d25edab4a2bb2d110bcc",
+        "MAA": 60.122,
+        "BWT": 28.7287,
+        "final_avg": 66.402
+      },
+      "delta": {
+        "MAA": -2.731,
+        "BWT": 20.7933,
+        "final_avg": 4.9499
+      },
+      "paired_complete": true
+    }
+  ],
+  "unpaired": [
     {
       "series": "r001",
       "ratio": "0.01",
@@ -193,35 +237,35 @@
     }
   ],
   "paired_means": {
-    "n_paired_complete": 0,
-    "n_paired_all": 0,
+    "n_paired_complete": 1,
+    "n_paired_all": 1,
     "low_ratio_tag": "r001",
     "high_ratio_tag": "r010",
     "delta_definition": "random-0.10 − random-0.01",
     "metrics": {
       "MAA": {
-        "low_ratio_mean": null,
-        "high_ratio_mean": null,
-        "mean_delta": null,
-        "min_delta": null,
-        "max_delta": null,
-        "n": 0
+        "low_ratio_mean": 62.853,
+        "high_ratio_mean": 60.122,
+        "mean_delta": -2.731,
+        "min_delta": -2.731,
+        "max_delta": -2.731,
+        "n": 1
       },
       "BWT": {
-        "low_ratio_mean": null,
-        "high_ratio_mean": null,
-        "mean_delta": null,
-        "min_delta": null,
-        "max_delta": null,
-        "n": 0
+        "low_ratio_mean": 7.9354,
+        "high_ratio_mean": 28.7287,
+        "mean_delta": 20.7933,
+        "min_delta": 20.7933,
+        "max_delta": 20.7933,
+        "n": 1
       },
       "final_avg": {
-        "low_ratio_mean": null,
-        "high_ratio_mean": null,
-        "mean_delta": null,
-        "min_delta": null,
-        "max_delta": null,
-        "n": 0
+        "low_ratio_mean": 61.4521,
+        "high_ratio_mean": 66.402,
+        "mean_delta": 4.9499,
+        "min_delta": 4.9499,
+        "max_delta": 4.9499,
+        "n": 1
       }
     }
   }

@@ -15,8 +15,8 @@
 | 系列 | ratio | ratio tag | 状态 |
 |---|---|---|---|
 | random replay | 0.01 | r001 | 当前 5 个 COMPLETE、0 个 RUNNING（开放式系列，可继续追加） |
-| random replay | 0.10 | r010 | 见 [r010 README](docs/experiments/coin_replay_random_r010/README.md) 状态节 |
-| 同 seed 配对（0.10 − 0.01） | — | — | [paired_comparison.json](docs/experiments/coin_replay_random/paired_comparison.json) / [PAIRED_REPORT.md](docs/experiments/coin_replay_random/PAIRED_REPORT.md) |
+| random replay | 0.10 | r010 | 当前 1 个 COMPLETE、0 个 RUNNING（MAA 60.122 / CoIN BWT +28.7287 / final_avg 66.402）→ [r010 README](docs/experiments/coin_replay_random_r010/README.md) |
+| 同 seed 配对（0.10 − 0.01） | — | — | 当前 1 对（seed 358341059）：ΔMAA −2.7310 / ΔBWT +20.7933 / Δfinal_avg +4.9499 → [paired_comparison.json](docs/experiments/coin_replay_random/paired_comparison.json) / [PAIRED_REPORT.md](docs/experiments/coin_replay_random/PAIRED_REPORT.md) |
 
 - 两个 ratio 的固定项完全一致：`SAMPLE_MODE=random`、`SEED=1234`、`DATA_SEED=1234`、
   `REPLAY_ACCUM=1`；t 段 accum=16（effective batch 896）/ replay 段 accum=1（effective batch 56）。

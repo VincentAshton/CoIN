@@ -82,6 +82,48 @@ playground/  Replay_random/r010/<run_id>/        round{2..4}_train.json(+.manife
 started_at/completed_at/result_directory/code_commit/config_hash/error_summary/
 registration_commit/result_commit/ratio/ratio_tag/paired_with 全字段 + prefix 基线数值。）
 
+## 结果（`run_0001_seed_358341059`）
+
+状态：**COMPLETE**（2026-09-11）；与 r001 的 `run_0001_seed_358341059` **同 seed 配对**
+（同 seed 下 0.01 样本集是 0.10 的子集，嵌套对照）。
+
+- A 矩阵（round 行 × task 列；4 位显示，全精度以 `coin_metrics.json` 原始浮点为准）
+
+| round\task | ScienceQA | TextVQA | ImageNet | GQA |
+|---|---|---|---|---|
+| round1 | 73.1431 | — | — | — |
+| round2 | 73.4497 | 36.5500 | — | — |
+| round3 | 74.6994 | 58.4600 | 4.6700 | — |
+| round4 | 76.4678 | 56.2800 | 96.5300 | 36.3300 |
+
+- 指标：**MAA = 60.122**、**CoIN BWT = +28.7287**、**final_avg = 66.402**
+  （终局旧任务均值 76.4259、对角均值 37.6733；独立重算与 coin_metrics 最大差 maxA=0、dMAA=7.6e-6、dBWT=2.8e-5）
+- 与同 seed random-0.01 配对差值（**random-0.10 − random-0.01**）：
+  ΔMAA **−2.7310**、ΔCoIN BWT **+20.7933**、Δfinal_avg **+4.9499**
+  （逐对明细见 [PAIRED_REPORT.md](../coin_replay_random/PAIRED_REPORT.md) / [paired_comparison.json](../coin_replay_random/paired_comparison.json)）
+- 与历史 prefix 基线差值：vs prefix-0.10 ΔMAA +2.6163 / ΔBWT +11.4981 / Δfinal_avg +10.6186；
+  vs prefix-0.01 ΔMAA −0.3186 / ΔBWT +42.3586 / Δfinal_avg +20.2095
+  （prefix 基线为**单次运行**，非分布，差值仅描述性）
+- 跨 run 可比性证据：`model_config_hash=5fe5a4b3…`、`data_revision=bf6bd4ee…` 与 r001 各 run **完全一致**
+  （同模型、同数据）；`code_commit=41abc5af222ba5eed7c6d25edab4a2bb2d110bcc`
+
+提交链（A → C → D，顺序在 Git 历史中可核验）：
+
+| 环节 | commit |
+|---|---|
+| A 注册 RUNNING | `6419a6866ef25ba3888282d21e2ef1e296277ba0` |
+| C 六件套发布 | `1cdb09ae3d858a0209e6eea565d4f2226fc3e37b` |
+| D registry COMPLETE | `3f6e13e8bdfa37f1b5435495fd7ec3f9e9ef6375` |
+
+发布物：[runs/run_0001_seed_358341059/](runs/run_0001_seed_358341059/)（六件套，`summary.json` 内含
+`repro` 全量 sha256、`paired` 配对元数据、`deltas` 全部差值）。验收：
+`validation_report.md` **20 项全 PASS**（含 7 ckpt 参数级 finite、tensor-diff changed=448、
+源数据独立重建、10 eval 单元预测校验、独立重算、脱敏扫描 clean）。
+
+口径提示：n=1 的配对差值是**描述性证据**（单训练 seed、单任务序），不作显著性结论；
+r010 与 r001 的 replay 样本量不同（0.10 是 0.01 的 10 倍）且构成嵌套，差值含「样本量」与
+「样本组成」两个不可完全分离的效应。
+
 ## 对照基线（prefix 系列；历史探索，非 random 比例主比较）
 
 | 基线 | MAA | CoIN BWT | final avg |

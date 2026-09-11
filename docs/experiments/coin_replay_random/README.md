@@ -6,8 +6,8 @@
 | 主实验 | 系列目录 | ratio tag | 状态 |
 |---|---|---|---|
 | random replay **ratio=0.01** | [coin_replay_random_r001](coin_replay_random_r001/README.md) | r001 | 当前 5 个 COMPLETE，0 个 RUNNING（开放式，可继续追加） |
-| random replay **ratio=0.10** | [coin_replay_random_r010](coin_replay_random_r010/README.md) | r010 | 见该系列 README 状态节（开放式，无预设总次数） |
-| **同 seed 配对比较**（0.10 − 0.01） | [paired_comparison.json](paired_comparison.json) / [PAIRED_REPORT.md](PAIRED_REPORT.md) | — | 按 seed 取两个 registry 的交集，动态生成 |
+| random replay **ratio=0.10** | [coin_replay_random_r010](coin_replay_random_r010/README.md) | r010 | 当前 1 个 COMPLETE，0 个 RUNNING（MAA 60.122 / CoIN BWT +28.7287 / final_avg 66.402） |
+| **同 seed 配对比较**（0.10 − 0.01） | [paired_comparison.json](paired_comparison.json) / [PAIRED_REPORT.md](PAIRED_REPORT.md) | — | 当前 1 对（seed 358341059）：ΔMAA −2.7310 / ΔBWT **+20.7933** / Δfinal_avg +4.9499 |
 
 固定配置（两个 ratio 完全一致，只有 ratio 与 replay 样本集不同）：
 `SAMPLE_MODE=random`、`SEED=1234`、`DATA_SEED=1234`、`REPLAY_ACCUM=1`、

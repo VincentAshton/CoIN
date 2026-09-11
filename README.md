@@ -15,8 +15,8 @@ ImageNet → GQA；抽样算法 `sha256_task_seed_python_shuffle_v1`（同 seed 
 |---|---|
 | **Random replay 总入口**（0.01 系列 / 0.10 系列 / 同 seed 配对） | → `codex/coin-replay-random` 分支 [docs/experiments/coin_replay_random/README.md](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random/docs/experiments/coin_replay_random/README.md) |
 | random ratio=0.01 系列（r001；当前 5 个 COMPLETE） | [系列 README](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random/docs/experiments/coin_replay_random_r001/README.md) ｜ [五次运行快照报告](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random/docs/experiments/coin_replay_random_r001/SERIES_REPORT.md) |
-| random ratio=0.10 系列（r010） | [系列 README + 状态表](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random/docs/experiments/coin_replay_random_r010/README.md) |
-| 同 seed 配对比较（0.10 − 0.01） | [paired_comparison.json](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random/docs/experiments/coin_replay_random/paired_comparison.json) ｜ [PAIRED_REPORT.md](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random/docs/experiments/coin_replay_random/PAIRED_REPORT.md) |
+| random ratio=0.10 系列（r010；当前 1 个 COMPLETE，MAA 60.122 / CoIN BWT +28.7287 / final_avg 66.402） | [系列 README（含 A 矩阵与提交链）](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random/docs/experiments/coin_replay_random_r010/README.md) |
+| 同 seed 配对比较（0.10 − 0.01；当前 1 对，seed 358341059） | [PAIRED_REPORT.md（ΔMAA −2.7310 / ΔBWT +20.7933 / Δfinal_avg +4.9499）](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random/docs/experiments/coin_replay_random/PAIRED_REPORT.md) ｜ [paired_comparison.json](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random/docs/experiments/coin_replay_random/paired_comparison.json) |
 | **历史探索 / legacy prefix baseline**（回放集=按时序取前 k，非 random 主比较） | → `results/coin-replay-r010-20260904` 分支 [结果包](https://github.com/VincentAshton/CoIN/tree/results/coin-replay-r010-20260904/docs/experiments/coin_replay) ｜ 运行代码与手册：`experiment/coin-replay-presweep-20260903` 分支（[REPRODUCE.md](https://github.com/VincentAshton/CoIN/blob/experiment/coin-replay-presweep-20260903/REPRODUCE.md)） |
 | 内部过程记录（prefix 阶段） | `experiment` 分支的 `docs/internal/`（HANDOFF.md / EXPERIMENT_LOG.md / RUNBOOK.md） |
 
@@ -27,8 +27,8 @@ ImageNet → GQA；抽样算法 `sha256_task_seed_python_shuffle_v1`（同 seed 
 | 系列 | ratio | ratio tag | 状态 |
 |---|---|---|---|
 | r001 | 0.01 | r001 | 当前 5 个 COMPLETE、0 个 RUNNING |
-| r010 | 0.10 | r010 | 见 [r010 系列 README](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random/docs/experiments/coin_replay_random_r010/README.md) 状态节 |
-| 配对（同 seed，0.10 − 0.01） | — | — | 见 [PAIRED_REPORT.md](https://github.com/VincentAshton/CoIN/blob/codex/coin-replay-random/docs/experiments/coin_replay_random/PAIRED_REPORT.md) |
+| r010 | 0.10 | r010 | 当前 1 个 COMPLETE、0 个 RUNNING（MAA 60.122 / CoIN BWT +28.7287 / final_avg 66.402） |
+| 配对（同 seed，0.10 − 0.01） | — | — | 当前 1 对（seed 358341059）：ΔMAA −2.7310 / ΔBWT **+20.7933** / Δfinal_avg +4.9499 |
 
 - r001（ratio=0.01，首批五次运行，2026-09-09~10）：MAA 61.9287 ± 1.3164、
   CoIN BWT **+11.3442 ± 5.0428**、final_avg 62.0781 ± 1.4895（mean ± sample sd，n=5）；

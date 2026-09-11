@@ -91,6 +91,21 @@ class TestRegistryRatioGeneric(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
+    def _fresh_series(self, src, name):
+        """拷贝系列目录并清空 runs（用 registry 自身重写三件套）。
+
+        测试断言 run_0001 起编号 / 指定 seed 可用，不能依赖线上注册表的实时内容
+        （线上 r001 已有 5 个 run、r010 已有 1 个 run → 直接拷会碰 seed 复用拒绝）。
+        """
+        d = os.path.join(self.tmp, name)
+        shutil.copytree(src, d)
+        sys.path.insert(0, os.path.join(ROOT, "scripts", "CoIN_Replay", "tools"))
+        import random_replay_registry as R
+        idx = R.load_index(d)
+        idx["runs"] = []
+        R.write_index(d, idx)
+        return d
+
     def _reg(self, docdir, *args):
         return run([sys.executable, REG, docdir, *args])
 
@@ -143,8 +158,7 @@ class TestRegistryRatioGeneric(unittest.TestCase):
     def test_cross_ratio_same_seed_pairing(self):
         """跨 ratio 同 seed 允许，且必须指向真同 seed 的 run。"""
         self.assertTrue(os.path.isdir(DOC_R010), DOC_R010)
-        r010 = os.path.join(self.tmp, "r010")
-        shutil.copytree(DOC_R010, r010)
+        r010 = self._fresh_series(DOC_R010, "r010")
         r001_index = os.path.join(self.doc, "index.json")
         seed = 358341059
         r = self._reg(r010, "register", "--seed", str(seed),
@@ -164,8 +178,7 @@ class TestRegistryRatioGeneric(unittest.TestCase):
         self.assertEqual(rows[0]["paired_with_run_id"], "run_0001_seed_358341059")
 
     def test_cross_ratio_pairing_seed_mismatch_rejected(self):
-        r010 = os.path.join(self.tmp, "r010b")
-        shutil.copytree(DOC_R010, r010)
+        r010 = self._fresh_series(DOC_R010, "r010b")
         r = self._reg(r010, "register", "--seed", "777",
                       "--paired-with", "run_0001_seed_358341059",
                       "--paired-index", os.path.join(self.doc, "index.json"))
@@ -173,8 +186,7 @@ class TestRegistryRatioGeneric(unittest.TestCase):
         self.assertIn("配对必须同 seed", r.stderr)
 
     def test_cross_ratio_pairing_requires_index(self):
-        r010 = os.path.join(self.tmp, "r010c")
-        shutil.copytree(DOC_R010, r010)
+        r010 = self._fresh_series(DOC_R010, "r010c")
         r = self._reg(r010, "register", "--seed", "778",
                       "--paired-with", "run_0001_seed_358341059")
         self.assertNotEqual(r.returncode, 0)

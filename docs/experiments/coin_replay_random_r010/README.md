@@ -68,13 +68,14 @@ playground/  Replay_random/r010/<run_id>/        round{2..4}_train.json(+.manife
 
 ## 状态
 
-当前 0 个 COMPLETE，1 个 RUNNING（`run_0001_seed_358341059`，与 r001 的
-`run_0001_seed_358341059` 同 seed 配对）；无预设目标运行总数。
+当前 1 个 COMPLETE，0 个 RUNNING（`run_0001_seed_358341059`，与 r001 的
+`run_0001_seed_358341059` 同 seed 配对：ΔMAA −2.7310 / ΔCoIN BWT **+20.7933** /
+Δfinal_avg +4.9499，方向 = random-0.10 − random-0.01）；无预设目标运行总数。
 
 <!-- registry-table:start -->
 | Run | Replay sample seed | MAA | BWT | Status | Result commit |
 |-----|--------------------|-----|-----|--------|---------------|
-| run_0001_seed_358341059 | 358341059 |  |  | RUNNING |  |
+| run_0001_seed_358341059 | 358341059 | 60.122 | 28.7287 | COMPLETE | 1cdb09ae3d858a0209e6eea565d4f2226fc3e37b |
 <!-- registry-table:end -->
 
 （表由 `tools/random_replay_registry.py` 自动维护；`index.json` 为权威记录，含

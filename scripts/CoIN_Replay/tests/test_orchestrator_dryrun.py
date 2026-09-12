@@ -141,6 +141,59 @@ class TestOrchestratorDryRun(unittest.TestCase):
         # 旧结果不能被误用：round2 的 TextVQA 无产物
         self.assertFalse(os.path.isdir(os.path.join(self.res, "TextVQA", "round2")))
 
+    # ---- eval 路径门禁 + 分阶段完成标记（2026-09-11 修正）--------------------
+
+    def test_eval_path_gate_passes_without_relative_symlinks(self):
+        """门禁在训练前 PASS；且 ROOT 下没有 ./checkpoints、./cl_dataset
+
+        （评估走显式 MODEL_BASE/IMAGE_FOLDER，不再依赖 worktree 软链——实踩缺口）。
+        """
+        self.assertFalse(os.path.exists(os.path.join(ROOT, "checkpoints")))
+        self.assertFalse(os.path.exists(os.path.join(ROOT, "cl_dataset")))
+        r = self._run()
+        self.assertEqual(r.returncode, 0, f"STDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}")
+        self.assertIn("eval 路径门禁 PASS", r.stdout)
+
+    def test_eval_path_gate_failfast_before_any_training(self):
+        """eval 阶段路径不可解析 → 训练开始前就失败（不产生 ckpt / round 产物）。"""
+        r = self._run(IMG_DIR=os.path.join(self.tmp, "nonexistent_dataset"))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("eval 路径门禁 FAIL", r.stdout + r.stderr)
+        self.assertFalse(os.path.isfile(os.path.join(self.res, ".round1_train_done")))
+        self.assertFalse(os.path.isfile(os.path.join(self.res, "round1_manifest.json")))
+        self.assertFalse(os.path.exists(os.path.join(self.ckpt, "round1_task_llava_lora")))
+
+    def test_train_marker_skips_retrain_after_eval_failure(self):
+        """评估失败后恢复：训练段标记 + ckpt 校验通过 → 只重做评估，不重训 task 段。
+
+        EVAL_FAULT_INJECT 在**每个**评估调用里注入（DRY_RUN 下最先触发的是 round1 的评估），
+        因此 round1 训练完成 → 标记写入 → 评估失败；恢复时必须跳过 round1 训练。
+        """
+        r1 = self._run(EVAL_FAULT_INJECT="1")
+        self.assertNotEqual(r1.returncode, 0)
+        self.assertTrue(os.path.isfile(os.path.join(self.res, ".round1_train_done")))
+        self.assertFalse(os.path.isfile(os.path.join(self.res, ".round1_done")))
+        task = os.path.join(self.ckpt, "round1_task_llava_lora", "adapter_model.bin")
+        t_task = os.stat(task).st_mtime_ns
+        r2 = self._run()  # 去掉故障注入 → 恢复
+        self.assertEqual(r2.returncode, 0, f"STDOUT:\n{r2.stdout}\nSTDERR:\n{r2.stderr}")
+        self.assertIn("训练段已完成", r2.stdout)
+        self.assertIn("跳过 task/replay 训练", r2.stdout)
+        # 训练产物未被重写（mtime 不变 = 没有重训）
+        self.assertEqual(os.stat(task).st_mtime_ns, t_task)
+        self.assertTrue(os.path.isfile(os.path.join(self.res, ".complete")))
+
+    def test_train_marker_not_trusted_when_ckpt_invalid(self):
+        """标记存在但 ckpt 被破坏 → 不轻信标记，删标记重训后仍能完成。"""
+        r1 = self._run(EVAL_FAULT_INJECT="1")
+        self.assertNotEqual(r1.returncode, 0)
+        self.assertTrue(os.path.isfile(os.path.join(self.res, ".round1_train_done")))
+        shutil.rmtree(os.path.join(self.ckpt, "round1_task_llava_lora"))
+        r2 = self._run()
+        self.assertIn("ckpt 校验失败", r2.stdout)
+        self.assertEqual(r2.returncode, 0, f"STDOUT:\n{r2.stdout}\nSTDERR:\n{r2.stderr}")
+        self.assertTrue(os.path.isfile(os.path.join(self.res, ".complete")))
+
     # ---- random-replay 系列（ratio 通用）：编排层 plumbing + 启动门 ------------
 
     def _run_dirs(self, run_id, tag="r001"):

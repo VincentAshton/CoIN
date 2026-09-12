@@ -518,6 +518,124 @@ def random_ratio_layout(value, run_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# eval 路径门禁（2026-09-11）：训练前确认评估阶段用到的模型/数据路径可解析
+#
+# 背景（实踩）：四个 eval shell 与 eval_gqa.py 曾硬编码相对路径（./checkpoints、./cl_dataset、
+# ./playground、./cl_dataset/GQA），新 worktree 缺这些软链时会在**数小时训练后**的评估阶段
+# 才失败。现在：① 全部改为可覆盖（shell 用 ${VAR:-默认}，eval_gqa 增 --data-root）；
+# ② 本门禁在训练前校验——暴露的覆盖钩子仍在、传入路径真实存在、文件里残余的相对路径
+# 必须能在 run 根下解析（新增硬编码路径会被当场拦下）。
+# ---------------------------------------------------------------------------
+
+EVAL_SHELL_SCRIPTS = ("1_eval_sqa.sh", "2_eval_textqa.sh", "3_eval_ImageNet.sh", "4_eval_gqa.sh")
+EVAL_PY_MODULES = ("eval_science_qa.py", "eval_textvqa.py", "eval_ImagetNet.py",
+                   "eval_gqa.py", "convert_gqa_for_eval.py", "model_vqa.py",
+                   "model_vqa_science.py", "model_text_vqa.py", "model_gqa.py")
+REL_REF_RE = re.compile(r"\./[A-Za-z0-9_./@+-]+")
+SHELL_DEFAULT_RE = re.compile(r"\$\{[A-Z_][A-Z0-9_]*:-")
+# 形如 MODELPATH='./checkpoints/...'：位置参数（$2）覆盖的默认值分支，编排脚本必传 $2
+SHELL_POSITIONAL_DEFAULT_RE = re.compile(r"^[A-Z_]+='?\./")
+# python 侧：任何含 default= 的行视为「可覆盖默认值行」（add_argument 可能跨多行书写）；
+# 注意：help 文本里不要出现字面相对路径（本门禁按原样扫描，出现即视为硬编码）
+PY_DEFAULT_RE = re.compile(r"default\s*=")
+
+
+def _strip_comment(line: str, is_python: bool) -> str:
+    """去掉纯注释行与行尾注释（简化规则：'#' 之后一律视为注释；本门禁的路径不含 '#'）。"""
+    s = line.strip()
+    if s.startswith("#"):
+        return ""
+    i = line.find("#")
+    return line[:i] if i >= 0 else line
+
+
+def eval_path_audit(root: str, model_base: str, image_folder: str,
+                    scripts_dir=None, py_dir=None) -> dict:
+    """训练前门禁：eval 阶段的模型/数据路径必须可解析。
+
+    检查项：
+      1. 四个 eval shell 必须保留 MODEL_BASE / IMAGE_FOLDER 覆盖钩子
+      2. eval_gqa.py 必须保留 --data-root 覆盖（原先硬编码 './cl_dataset/GQA'）
+      3. model_base / image_folder 必须真实存在（目录）
+      4. 文件里出现的相对路径：位于「可覆盖默认值行」（shell 的 ${VAR:-...}、python 的
+         add_argument(default=...)）→ 视为由覆盖机制处理；其余相对路径必须在 root 下存在
+    返回 JSON 报告（pass / 各项明细）；调用方非零退出即 fail-fast。
+    """
+    root = os.path.abspath(root)
+    scripts_dir = scripts_dir or os.path.join(root, "scripts", "LLaVA", "Eval")
+    py_dir = py_dir or os.path.join(root, "ETrain", "Eval", "LLaVA", "CoIN")
+    rep = {"root": root, "model_base": model_base, "image_folder": image_folder,
+           "hooks": {}, "missing_paths": [], "uncovered_relative_refs": [],
+           "covered_relative_refs": [], "files_scanned": []}
+
+    for name in EVAL_SHELL_SCRIPTS:
+        p = os.path.join(scripts_dir, name)
+        if not os.path.isfile(p):
+            rep["hooks"][name] = {"exists": False, "model_base_hook": False,
+                                  "image_folder_hook": False}
+            continue
+        txt = open(p, encoding="utf-8", errors="replace").read()
+        rep["hooks"][name] = {"exists": True,
+                              "model_base_hook": "${MODEL_BASE:-" in txt,
+                              "image_folder_hook": "${IMAGE_FOLDER:-" in txt,
+                              # MODELPATH 由位置参数 $2 覆盖（编排脚本恒传 ckpt 路径）
+                              "positional_modelpath_hook": "MODELPATH=$2" in txt}
+        _scan_refs(p, root, rep, is_python=False)
+        rep["files_scanned"].append(os.path.relpath(p, root))
+    gqa = os.path.join(py_dir, "eval_gqa.py")
+    if os.path.isfile(gqa):
+        txt = open(gqa, encoding="utf-8", errors="replace").read()
+        rep["hooks"]["eval_gqa.py"] = {"exists": True,
+                                       # 精确匹配 add_argument('--data-root' / add_argument("--data-root"
+                                       "data_root_arg": bool(re.search(
+                                           r"add_argument\(\s*['\"]--data-root['\"]", txt)),
+                                       "data_root_used": "args.data_root" in txt}
+        _scan_refs(gqa, root, rep, is_python=True)
+        rep["files_scanned"].append(os.path.relpath(gqa, root))
+    for name in EVAL_PY_MODULES:
+        p = os.path.join(py_dir, name)
+        if os.path.isfile(p):
+            _scan_refs(p, root, rep, is_python=True)
+            rep["files_scanned"].append(os.path.relpath(p, root))
+
+    for p in (model_base, image_folder):
+        if not p or not os.path.isdir(p):
+            rep["missing_paths"].append(p or "<空>")
+
+    hooks_ok = all(v.get("model_base_hook") and v.get("image_folder_hook")
+                   and v.get("positional_modelpath_hook")
+                   for k, v in rep["hooks"].items() if k in EVAL_SHELL_SCRIPTS) and \
+        all(v.get("exists") for v in rep["hooks"].values())
+    gqa_ok = rep["hooks"].get("eval_gqa.py", {}).get("data_root_arg", False) and \
+        rep["hooks"].get("eval_gqa.py", {}).get("data_root_used", False)
+    rep["pass"] = bool(hooks_ok and gqa_ok and not rep["missing_paths"]
+                       and not rep["uncovered_relative_refs"])
+    rep["hooks_ok"] = bool(hooks_ok)
+    rep["eval_gqa_data_root_ok"] = bool(gqa_ok)
+    return rep
+
+
+def _scan_refs(path: str, root: str, rep: dict, is_python: bool) -> None:
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for lineno, raw in enumerate(fh, 1):
+            line = _strip_comment(raw, is_python)
+            if not line:
+                continue
+            is_default_line = (PY_DEFAULT_RE.search(line) if is_python
+                               else (SHELL_DEFAULT_RE.search(line)
+                                     or SHELL_POSITIONAL_DEFAULT_RE.search(line.strip())))
+            for m in REL_REF_RE.finditer(line):
+                ref = m.group(0)
+                entry = {"file": os.path.relpath(path, root), "line": lineno, "ref": ref}
+                if is_default_line:
+                    rep["covered_relative_refs"].append(entry)
+                elif os.path.exists(os.path.join(root, ref)):
+                    rep["covered_relative_refs"].append(dict(entry, resolvable=True))
+                else:
+                    rep["uncovered_relative_refs"].append(entry)
+
+
+# ---------------------------------------------------------------------------
 # manifest（工单 6）
 # ---------------------------------------------------------------------------
 
@@ -791,6 +909,14 @@ def main():
         a = _kv(sys.argv[2:])
         rep = manifest_cross_check(a["--res-root-a"], a["--res-root-b"])
         print(json.dumps(rep, ensure_ascii=False))
+        sys.exit(0 if rep["pass"] else 1)
+    elif cmd == "eval-path-audit":
+        # 训练前 eval 路径门禁（见 eval_path_audit 文档）；FAIL 时仍打印 JSON 并非零退出
+        a = _kv(sys.argv[2:])
+        rep = eval_path_audit(a.get("--root", "."), a.get("--model-base", ""),
+                              a.get("--image-folder", ""),
+                              scripts_dir=a.get("--scripts-dir"), py_dir=a.get("--py-dir"))
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
         sys.exit(0 if rep["pass"] else 1)
     elif cmd == "ratio-tag":
         # random 系列 ratio → tag（唯一来源；非法 ratio 非零退出，供 gate fail-fast）

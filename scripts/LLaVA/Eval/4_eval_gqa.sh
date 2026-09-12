@@ -16,6 +16,13 @@ else
 fi
 RESULT_DIR="${RESULT_DIR:-./results/CoIN/LLaVA/GQA}"
 QF="${QUESTION_FILE:-./playground/Instructions_Original/GQA/test.json}"
+
+# 路径覆盖（2026-09-11）：显式绝对路径优先；默认值保持旧行为（prefix 既有流程不变）。
+# 新 worktree 缺 ./checkpoints、./cl_dataset 软链时，由编排脚本 export MODEL_BASE/IMAGE_FOLDER
+# 传入真实路径；run_replay_exp.sh 在训练前有 eval 路径门禁校验其可解析。
+MODEL_BASE="${MODEL_BASE:-./checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5}"
+IMAGE_FOLDER="${IMAGE_FOLDER:-./cl_dataset}"
+
 STAGE_DIR="$RESULT_DIR/$STAGE"
 
 if [ "${EVAL_DRY_RUN:-0}" = "1" ]; then
@@ -56,9 +63,9 @@ pids=()
 for IDX in $(seq 0 $((CHUNKS-1))); do
     CUDA_VISIBLE_DEVICES=${GPULIST[$IDX]} python -m ETrain.Eval.LLaVA.CoIN.model_gqa \
         --model-path "$MODELPATH" \
-        --model-base ./checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5 \
+        --model-base "$MODEL_BASE" \
         --question-file "$QF" \
-        --image-folder ./cl_dataset \
+        --image-folder "$IMAGE_FOLDER" \
         --answers-file "$STAGE_DIR/${CHUNKS}_${IDX}.jsonl" \
         --num-chunks "$CHUNKS" \
         --chunk-idx "$IDX" \
@@ -82,4 +89,5 @@ python -m ETrain.Eval.LLaVA.CoIN.convert_gqa_for_eval \
     --src "$output_file" \
     --dst "$STAGE_DIR/testdev_balanced_predictions.json" || exit 1
 python -m ETrain.Eval.LLaVA.CoIN.eval_gqa \
-    --tier testdev_balanced --path "$STAGE_DIR" --output-dir "$STAGE_DIR" || exit 1
+    --tier testdev_balanced --path "$STAGE_DIR" --output-dir "$STAGE_DIR" \
+    --data-root "$IMAGE_FOLDER" || exit 1

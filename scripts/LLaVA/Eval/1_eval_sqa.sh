@@ -19,6 +19,13 @@ else
 fi
 RESULT_DIR="${RESULT_DIR:-./results/CoIN/LLaVA/ScienceQA}"
 QF="${QUESTION_FILE:-./playground/Instructions_Original/ScienceQA/test.json}"
+
+# 路径覆盖（2026-09-11）：显式绝对路径优先；默认值保持旧行为（prefix 既有流程不变）。
+# 新 worktree 缺 ./checkpoints、./cl_dataset 软链时，由编排脚本 export MODEL_BASE/IMAGE_FOLDER
+# 传入真实路径；run_replay_exp.sh 在训练前有 eval 路径门禁校验其可解析。
+MODEL_BASE="${MODEL_BASE:-./checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5}"
+IMAGE_FOLDER="${IMAGE_FOLDER:-./cl_dataset}"
+
 STAGE_DIR="$RESULT_DIR/$STAGE"
 
 # ---- 零 GPU 演练（目录契约测试）----
@@ -59,9 +66,9 @@ pids=()
 for IDX in $(seq 0 $((CHUNKS-1))); do
     CUDA_VISIBLE_DEVICES=${GPULIST[$IDX]} python -m ETrain.Eval.LLaVA.CoIN.model_vqa_science \
         --model-path "$MODELPATH" \
-        --model-base ./checkpoints/LLaVA/Vicuna/vicuna-7b-v1.5 \
+        --model-base "$MODEL_BASE" \
         --question-file "$QF" \
-        --image-folder ./cl_dataset \
+        --image-folder "$IMAGE_FOLDER" \
         --answers-file "$STAGE_DIR/${CHUNKS}_${IDX}.jsonl" \
         --num-chunks "$CHUNKS" \
         --chunk-idx "$IDX" \
@@ -82,7 +89,7 @@ for IDX in $(seq 0 $((CHUNKS-1))); do
 done
 
 python -m ETrain.Eval.LLaVA.CoIN.eval_science_qa \
-    --base-dir ./cl_dataset/ScienceQA \
+    --base-dir "$IMAGE_FOLDER/ScienceQA" \
     --result-file "$output_file" \
     --output-file "$STAGE_DIR/output.jsonl" \
     --output-result "$STAGE_DIR/output_result.jsonl" || exit 1

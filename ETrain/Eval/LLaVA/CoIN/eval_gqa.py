@@ -84,6 +84,11 @@ parser.add_argument('--grounding',      action="store_true",        help = "True
 parser.add_argument('--objectFeatures', action="store_true",        help = "True for object-based attention (False for spatial).")
 parser.add_argument('--mapSize',    default = 7,    type = int, help = "Optional, only to get attention score. Images features map size, mapSize * mapSize")
 parser.add_argument('--output-dir', type=str)
+# 数据集根覆盖（新增，2026-09-11）：默认保持旧行为 './cl_dataset'，正式流程显式传 IMAGE_FOLDER。
+# 背景：本行下方原为硬编码 os.path.join('./cl_dataset/GQA', ...)，在新 worktree（无 ./cl_dataset
+# 软链）下会在评估阶段才失败——数小时训练后才发现。改为可覆盖 + 训练前门禁校验。
+parser.add_argument('--data-root', type=str, default='./cl_dataset',
+                    help="数据集根（GQA 题目文件所在父目录；默认值与旧行为一致）")
 args = parser.parse_args()
 
 print("Please make sure to use our provided visual features as gqadataset.org for better comparability. We provide both spatial and object-based features trained on GQA train set.") 
@@ -123,7 +128,7 @@ def loadFile(name):
 
 # Load questions
 print("Loading questions...")
-questions = loadFile(os.path.join('./cl_dataset/GQA',args.questions.format(tier = args.tier)))
+questions = loadFile(os.path.join(args.data_root, 'GQA', args.questions.format(tier = args.tier)))
 
 # # Load choices
 # print("Loading choices...")

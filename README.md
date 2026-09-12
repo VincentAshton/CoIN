@@ -18,8 +18,15 @@
 | random replay | 0.10 | r010 | 当前 1 个 COMPLETE、0 个 RUNNING（MAA 60.122 / CoIN BWT +28.7287 / final_avg 66.402）→ [r010 README](docs/experiments/coin_replay_random_r010/README.md) |
 | 同 seed 配对（0.10 − 0.01） | — | — | 当前 1 对（seed 358341059）：ΔMAA −2.7310 / ΔBWT +20.7933 / Δfinal_avg +4.9499 → [paired_comparison.json](docs/experiments/coin_replay_random/paired_comparison.json) / [PAIRED_REPORT.md](docs/experiments/coin_replay_random/PAIRED_REPORT.md) |
 
-- 两个 ratio 的固定项完全一致：`SAMPLE_MODE=random`、`SEED=1234`、`DATA_SEED=1234`、
+- 两个 ratio 的控制变量一致（**模型 / 数据 / 训练超参数 / 训练 seed / replay sample seed / 抽样算法**）：
+  `SAMPLE_MODE=random`、`SEED=1234`、`DATA_SEED=1234`、
   `REPLAY_ACCUM=1`；t 段 accum=16（effective batch 896）/ replay 段 accum=1（effective batch 56）。
+  **注意：两次运行使用不同代码提交**（r001 = `16f27d4`，r010 `run_0001` = `41abc5a`）——新代码经 r001
+  向后兼容测试（结果字段 / 六件套 / `config_hash` 逐项一致）未发现训练语义变化，但严格来说不是同一
+  代码提交，作为配对设计限制保留。
+- **BWT 口径**：BWT 受阶段性波动支配（本次 ImageNet round3 4.67 → round4 96.53 的恢复贡献极大），
+  `+28.7287` 不宜简化为「几乎没有遗忘」；配对结论应表述为「final_avg/BWT 更高、MAA 更低」的
+  稳定性—可塑性权衡。
 - **无固定总运行次数**：系列开放；全部运行（含 FAILED）永久公开，不按指标筛选或隐藏。
 
 ## 历史探索 / legacy prefix baseline（不属于 random 比例主比较）

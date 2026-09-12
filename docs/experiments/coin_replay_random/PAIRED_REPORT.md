@@ -1,6 +1,6 @@
 # Random Replay 同 seed 配对比较（ratio 对照组）
 
-- 生成: 2026-09-11T22:53:38+08:00（`scripts/CoIN_Replay/tools/random_replay_pair.py`）
+- 生成: 2026-09-12T16:11:30+08:00（`scripts/CoIN_Replay/tools/random_replay_pair.py`）
 - 配对方式: **按 replay sample seed 取两个系列的交集**（不按 run_number 猜测配对）
 - 配对差值定义: **random-0.10 − random-0.01**（高 ratio 为被减数）
 - 配对 n（完整 COMPLETE 对）: **1**；seed 交集内 run 对（含未完成）: 1
@@ -61,3 +61,5 @@
 2. n 为 seed 交集大小，属**描述性证据**，不作显著性推断。
 3. 固定训练 SEED 不等于逐 bit 确定性（CUDA / FlashAttention / TF32 / 分布式），差值不能唯一归因于 replay 比例。
 4. 同 seed 的 0.01 样本集是 0.10 的子集（嵌套），因此差值含「样本量」与「样本组成」两个无法完全分离的效应。
+5. 同一对两侧 run 的代码提交见逐对表 `code_commit` 列（不假定两侧相同）。「固定项一致」仅指模型/数据/训练超参/训练 seed/replay sample seed/抽样算法；若两侧提交不同（例如 r001 `16f27d4` vs r010 `41abc5a`），该差异经低 ratio 系列的向后兼容测试（结果字段/六件套/config_hash 逐项一致）未发现训练语义变化，但仍作为配对设计限制保留。
+6. BWT 由各任务 `final − diagonal` 合成，可能被阶段性波动支配（例如 ImageNet round3 受强 replay 干扰、round4 恢复）：不应把正 BWT 直接解读为「几乎没有遗忘」，需结合 A 矩阵的阶段性变化。

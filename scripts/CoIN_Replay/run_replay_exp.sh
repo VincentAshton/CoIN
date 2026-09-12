@@ -76,6 +76,12 @@ RES_ROOT="${RES_ROOT:-$ROOT/results/CoIN_Replay/ratio_${RATIO}}"
 REPLAY_DATA_DIR="${REPLAY_DATA_DIR:-$ROOT/playground/Replay/ratio_${RATIO}}"
 PREFLIGHT_REPORT="${PREFLIGHT_REPORT:-$ROOT/results/CoIN_Replay/preflight_report.json}"
 
+# 评估脚本用显式绝对路径（2026-09-11）：四个 eval shell 与 eval_gqa.py 支持
+# MODEL_BASE / IMAGE_FOLDER / --data-root 覆盖，避免依赖 ./checkpoints、./cl_dataset
+# 软链（新 worktree 缺软链时会在训练数小时后的评估阶段才失败——已实踩）。
+export MODEL_BASE="$BASE_MODEL"
+export IMAGE_FOLDER="$IMG_DIR"
+
 WORLD=$(awk -F',' '{print NF}' <<< "$GPUS")
 mapfile -t TASKS < <(python3 -c "import json,sys; print('\n'.join(json.loads(sys.argv[1])))" "$TASKS_JSON")
 T=${#TASKS[@]}
@@ -118,6 +124,19 @@ preflight() {
     [[ -f "$ROOT/scripts/LLaVA/Eval/$s.sh" ]] || { echo "ERROR: 缺评估脚本 $s.sh"; missing=1; }
   done
   (( missing == 0 )) || die "前置文件检查失败"
+
+  # eval 路径门禁（2026-09-11）：训练前确认评估阶段的模型/数据路径可解析。
+  # 覆盖钩子缺失（有人改回硬编码相对路径）、传入路径不存在、或文件里出现无法解析的
+  # 相对路径 → 立即失败，避免"训练数小时后评估才炸"。
+  local ep
+  if ! ep=$(py eval-path-audit --root "$ROOT" --model-base "$MODEL_BASE" \
+              --image-folder "$IMAGE_FOLDER"); then
+    echo "==== eval 路径门禁 FAIL ===="
+    echo "$ep" | python3 -m json.tool 2>/dev/null || echo "$ep"
+    die "eval 路径门禁失败：评估阶段的模型/数据路径不可解析（可 export MODEL_BASE/IMAGE_FOLDER 指向真实路径，或补 ./checkpoints、./cl_dataset 软链）"
+  fi
+  echo "==== eval 路径门禁 PASS ===="
+  echo "$ep" | python3 -m json.tool 2>/dev/null || echo "$ep"
 
   # 数据 preflight（缓存：report 存在且 data_sha256 一致则跳过）
   local quick_sha
@@ -328,6 +347,26 @@ run_round() {
     [[ -d "$prev" ]] || die "缺上一轮 checkpoint $prev"
   fi
 
+  # 1) 任务微调 + 2) replay —— 由「训练段完成标记」保护：训练已完成但评估失败时，
+  #    恢复运行只重做评估，不重训整个 task 段（2026-09-11）。
+  local train_marker="$RES_ROOT/.round${j}_train_done"
+  local do_train=1
+  if [[ -f "$train_marker" ]]; then
+    local tk_ok=0 rk_ok=0
+    if py ckpt-validate "$task_ckpt" >/dev/null 2>&1; then tk_ok=1; fi
+    if (( j == 1 )); then rk_ok=1; else
+      if py ckpt-validate "$replay_ckpt" >/dev/null 2>&1; then rk_ok=1; fi
+    fi
+    if (( tk_ok == 1 && rk_ok == 1 )); then
+      log "round$j 训练段已完成（.round${j}_train_done + ckpt 校验通过）→ 跳过 task/replay 训练，直接评估"
+      do_train=0
+    else
+      log "round$j 训练段标记存在但 ckpt 校验失败（task=$tk_ok replay=$rk_ok）→ 删标记并重训"
+      rm -f "$train_marker"
+    fi
+  fi
+
+  if (( do_train == 1 )); then
   # 1) 任务微调
   train_one "round${j}_${task}_task" "$DATA_DIR/$task/train.json" "$task_ckpt" "$prev" "$EPOCHS"
 
@@ -361,6 +400,12 @@ run_round() {
       fi
       log "ckpt-tensor-diff 通过：replay 真实更新已确认（changed>0 + hash≠ + finite）"
     fi
+  fi
+  touch "$train_marker"
+  log "round$j 训练段完成标记写入（.round${j}_train_done）"
+  fi
+
+  if (( j > 1 )); then
     eval_ckpt="$replay_ckpt"
   fi
 

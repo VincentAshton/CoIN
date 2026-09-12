@@ -9,6 +9,8 @@ RATIO=0.10、REPLAY_ACCUM=1、SEED=1234、DATA_SEED=1234；每次只变
 - 系列总入口：[docs/experiments/coin_replay_random/README.md](../coin_replay_random/README.md)
 - 同 seed 配对结果：[paired_comparison.json](../coin_replay_random/paired_comparison.json) /
   [PAIRED_REPORT.md](../coin_replay_random/PAIRED_REPORT.md)
+- 执行与预启动审计：[EXECUTION_REPORT.md](EXECUTION_REPORT.md) /
+  [PRELAUNCH_AUDIT.json](PRELAUNCH_AUDIT.json)
 - 长期分支：`codex/coin-replay-random`（同一分支同时维护 0.01 与 0.10）
 - ratio tag：**r010**（由 ratio 数值派生，`coin_lib.ratio_tag`：0.01→r001、0.10→r010）
 
@@ -98,6 +100,12 @@ registration_commit/result_commit/ratio/ratio_tag/paired_with 全字段 + prefix
 
 - 指标：**MAA = 60.122**、**CoIN BWT = +28.7287**、**final_avg = 66.402**
   （终局旧任务均值 76.4259、对角均值 37.6733；独立重算与 coin_metrics 最大差 maxA=0、dMAA=7.6e-6、dBWT=2.8e-5）
+- **BWT 分解（各任务 `final − diagonal`）**：ScienceQA **+3.3247**、TextVQA **+19.7300**、
+  ImageNet **+91.8600**、GQA **0**（四项均值 = 28.7287 = BWT）。
+  ⚠️ 其中 ImageNet 在 round3 被强 replay 严重干扰（4.67）而在 round4 大幅恢复（96.53）——
+  **BWT 的正值主要由该阶段性恢复贡献，不能表述为「几乎没有遗忘」**。
+  更准确的结论：random-0.10 相比同 seed random-0.01 **提高了 final_avg 与 BWT、降低了 MAA**，
+  呈现「更强的终局保持 ↔ 更严重的阶段性新任务干扰」的**稳定性—可塑性权衡**。
 - 与同 seed random-0.01 配对差值（**random-0.10 − random-0.01**）：
   ΔMAA **−2.7310**、ΔCoIN BWT **+20.7933**、Δfinal_avg **+4.9499**
   （逐对明细见 [PAIRED_REPORT.md](../coin_replay_random/PAIRED_REPORT.md) / [paired_comparison.json](../coin_replay_random/paired_comparison.json)）
@@ -106,6 +114,12 @@ registration_commit/result_commit/ratio/ratio_tag/paired_with 全字段 + prefix
   （prefix 基线为**单次运行**，非分布，差值仅描述性）
 - 跨 run 可比性证据：`model_config_hash=5fe5a4b3…`、`data_revision=bf6bd4ee…` 与 r001 各 run **完全一致**
   （同模型、同数据）；`code_commit=41abc5af222ba5eed7c6d25edab4a2bb2d110bcc`
+- **代码提交差异（配对设计限制）**：本 run 的 `code_commit=41abc5a`，而 r001 各 run 为 `16f27d4`。
+  因此「固定项一致」严格指**模型 / 数据 / 训练超参数 / 训练 seed / replay sample seed / 抽样算法**一致；
+  新增代码经 r001 向后兼容测试（结果字段 / 六件套 / `config_hash` 逐项一致）未发现训练语义变化，
+  但**不是同一代码提交**，解释配对差值时保留该限制。
+- 说明：六件套 `summary.json` 中 `paired.this_result_commit=null` 属**正常**——提交无法预知自身 SHA；
+  真实 C SHA 记录在 registry 的 `result_commit` 字段与本文件提交链表（不回头修改已发布六件套）。
 
 提交链（A → C → D，顺序在 Git 历史中可核验）：
 

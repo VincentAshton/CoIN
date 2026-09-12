@@ -5,13 +5,24 @@
 
 | 主实验 | 系列目录 | ratio tag | 状态 |
 |---|---|---|---|
-| random replay **ratio=0.01** | [coin_replay_random_r001](coin_replay_random_r001/README.md) | r001 | 当前 5 个 COMPLETE，0 个 RUNNING（开放式，可继续追加） |
-| random replay **ratio=0.10** | [coin_replay_random_r010](coin_replay_random_r010/README.md) | r010 | 当前 1 个 COMPLETE，0 个 RUNNING（MAA 60.122 / CoIN BWT +28.7287 / final_avg 66.402） |
+| random replay **ratio=0.01** | [coin_replay_random_r001](../coin_replay_random_r001/README.md) | r001 | 当前 5 个 COMPLETE，0 个 RUNNING（开放式，可继续追加） |
+| random replay **ratio=0.10** | [coin_replay_random_r010](../coin_replay_random_r010/README.md) | r010 | 当前 1 个 COMPLETE，0 个 RUNNING（MAA 60.122 / CoIN BWT +28.7287 / final_avg 66.402） |
 | **同 seed 配对比较**（0.10 − 0.01） | [paired_comparison.json](paired_comparison.json) / [PAIRED_REPORT.md](PAIRED_REPORT.md) | — | 当前 1 对（seed 358341059）：ΔMAA −2.7310 / ΔBWT **+20.7933** / Δfinal_avg +4.9499 |
 
-固定配置（两个 ratio 完全一致，只有 ratio 与 replay 样本集不同）：
-`SAMPLE_MODE=random`、`SEED=1234`、`DATA_SEED=1234`、`REPLAY_ACCUM=1`、
+> **BWT 口径**：BWT 由各任务 `final − diagonal` 合成，受阶段性波动支配——本次 ImageNet 在 round3 被
+> 强 replay 干扰到 4.67、round4 恢复到 96.53，对 BWT 贡献极大。**+28.7287 不宜简化为「几乎没有遗忘」**；
+> 准确表述见 [r010 结果节](../coin_replay_random_r010/README.md)（稳定性—可塑性权衡）。
+> 执行与预启动审计：[EXECUTION_REPORT.md](../coin_replay_random_r010/EXECUTION_REPORT.md) /
+> [PRELAUNCH_AUDIT.json](../coin_replay_random_r010/PRELAUNCH_AUDIT.json)。
+
+控制变量（两个 ratio 一致）：**模型与数据、训练超参数、训练 seed（SEED/DATA_SEED）、replay sample
+seed 与抽样算法**。`SAMPLE_MODE=random`、`SEED=1234`、`DATA_SEED=1234`、`REPLAY_ACCUM=1`、
 LLaVA-1.5-7B + LoRA(r=192/α=256)，任务序 ScienceQA → TextVQA → ImageNet → GQA。
+
+**注意：两次运行使用不同代码提交**（r001 各 run = `16f27d4`，r010 `run_0001` = `41abc5a`）。新增代码
+（ratio 通用化 + 门禁泛化）经 r001 向后兼容测试：结果字段 / 六件套 / `config_hash` 逐项一致，未发现
+训练语义变化；但严格来说**不是同一代码提交**，该差异作为配对设计限制保留（后续新配对尽量让两侧
+使用同一冻结 commit）。
 
 抽样算法（两个 ratio 同一实现）：
 `sha256_task_seed_python_shuffle_v1` —— `task_seed = sha256("<replay_sample_seed>:<task>")`，

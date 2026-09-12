@@ -1,0 +1,157 @@
+{
+  "series": "CoIN random-replay r010",
+  "phase": "cloud prelaunch canary (B) + formal run execution",
+  "date": "2026-09-11",
+  "audited_commit": "41abc5af222ba5eed7c6d25edab4a2bb2d110bcc",
+  "audited_commit_prev": "9e252184ad1286759b79c130d0fc385405a80fb0 (ratio 通用化重构)",
+  "audit_scope_note": "审计覆盖 ratio 通用化后的全部代码路径（0.01/0.10 gate、finalize、registry、嵌套校验）；正式 run 的运行代码 = 41abc5a，云端 checkout 精确一致。原始日志与完整输出不入库。",
+  "cloud": {
+    "instance": "ebcloud ssh-cn-huabei1.ebcloud.com:30267 (root)",
+    "worktree": "/root/data/coin/project_generic",
+    "checkout_commit": "41abc5af222ba5eed7c6d25edab4a2bb2d110bcc",
+    "checkout_exact": true,
+    "gpu": "4x NVIDIA A100-SXM4-80GB（审计开始时 4 卡空闲 0% util）",
+    "disk": "/root/data 1.0T 卷：532G used / 493G avail（52%），inode 使用 24%",
+    "shm": "200G tmpfs",
+    "run_root": "/root/data/coin/formal/r010_run_0001_seed_358341059",
+    "log_dir": "/root/data/coin/logs/r010_prelaunch/"
+  },
+  "tests": [
+    {
+      "env": "cloud conda coin @ 41abc5a",
+      "run": 146,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "seconds": 370.503,
+      "note": "完整依赖环境：torch tensor suite 与 PIL 图片解码用例均真实执行（无 skip）"
+    },
+    {
+      "env": "cloud conda coin @ 9e25218",
+      "run": 145,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "seconds": 811.5
+    },
+    {
+      "env": "local WSL zero-GPU @ 41abc5a",
+      "run": 146,
+      "fail": 0,
+      "error": 0,
+      "skip": 18,
+      "note": "18 skips = 9 torch-only + 9 PIL-only；零依赖环境的显式门控，不计为通过"
+    }
+  ],
+  "checks": [
+    {
+      "item": "全量数据 preflight（无 skip-PIL）",
+      "result": "PASS",
+      "evidence": "data_sha256=30a878a2…；四任务 missing=0 / corrupt=0；ScienceQA 12726 train / 4241 test、TextVQA 34602 / 5000、ImageNet 129833 / 5050、GQA 72140 / 12578"
+    },
+    {
+      "item": "随机样本 A/B 独立重建一致性",
+      "result": "PASS",
+      "evidence": "seed=358341059：6 次独立重建逐字节一致（仅 manifest 创建时间/临时输出路径等非语义字段不同）"
+    },
+    {
+      "item": "0.01 ⊆ 0.10 嵌套/严格前缀",
+      "result": "PASS",
+      "evidence": "0.01 selected_indices 为 0.10 的严格前缀；k=floor(N×ratio)：ScienceQA 1272（N=12721）、TextVQA 3460（34602）、ImageNet 12983（129835）；round 总量 0.10 = 1272 / 4732 / 17715，0.01 = 127 / 473 / 1771；sampling_algorithm 两侧均为 sha256_task_seed_python_shuffle_v1"
+    },
+    {
+      "item": "4×GPU NCCL + flash-attn + bf16 smoke",
+      "result": "PASS",
+      "evidence": "audit4_gpu_smoke.sh；四卡真实通信与前向/反向"
+    },
+    {
+      "item": "DeepSpeed ZeRO-3 真实参数更新 smoke",
+      "result": "PASS",
+      "evidence": "smoke_ds：参数发生真实更新（非空转）"
+    },
+    {
+      "item": "最小真实评估 + prediction/artifact 校验",
+      "result": "PASS",
+      "evidence": "真实模型评估跑通并校验产物落盘"
+    },
+    {
+      "item": "§六.7 预启动八项",
+      "result": "PASS",
+      "evidence": "audit5_prelaunch_checks.sh 八项全 PASS"
+    },
+    {
+      "item": "eval 阶段相对路径缺口（本 run 已实踩并永久修复）",
+      "result": "FIXED",
+      "evidence": "见 EXECUTION_REPORT.md §3/§4：四个 eval shell 与 eval_gqa.py 改为显式路径覆盖；新增训练前门禁 eval-path-audit（含回归用例）；新增训练/评估分阶段完成标记"
+    }
+  ],
+  "storage_audit": {
+    "verified_at": "2026-09-11（实例已释放，2026-09-12 未能再次核验）",
+    "volume": "/root/data 1.0T",
+    "used_gb": 532,
+    "avail_gb": 493,
+    "inode_used_pct": 24,
+    "must_keep": [
+      "datasets 44G",
+      "models 15G",
+      "conda 5.7G",
+      "r001 五个 run 各 6.6G",
+      "r010 run 144G",
+      "导出六件套 36K",
+      "审计日志 3.5M"
+    ],
+    "deletion_candidates_reported_only": [
+      {
+        "path": "<run_root>/checkpoints/CoIN_Replay_random/r010/run_0001_seed_358341059/*/checkpoint-*",
+        "count": 7,
+        "size_gb": "约 140",
+        "purpose": "HF Trainer 单 epoch 中间存档",
+        "risk": "不参与指标/加载链/验收；删除后失去中途恢复能力，只能重训再生"
+      },
+      {
+        "path": "/root/data/coin/project/checkpoints",
+        "size_gb": 288,
+        "purpose": "prefix 历史探索 ckpt",
+        "risk": "legacy prefix baseline，需用户单独决定"
+      },
+      {
+        "path": "/root/data/coin/tmp 残留",
+        "size_gb": "<0.1",
+        "purpose": "中间产物"
+      }
+    ],
+    "do_not_touch": [
+      "tmp 下未归类的历史脚本/JSON（状态不明）",
+      "本地两份历史笔记"
+    ]
+  },
+  "post_run_fixes_2026_09_12": {
+    "scope": "run 门禁缺口永久修复（不改动任何已发布结果）",
+    "items": [
+      "scripts/LLaVA/Eval/{1_eval_sqa,2_eval_textqa,3_eval_ImageNet,4_eval_gqa}.sh：MODEL_BASE / IMAGE_FOLDER 显式覆盖（默认值保持旧行为）",
+      "ETrain/Eval/LLaVA/CoIN/eval_gqa.py：新增 --data-root（原硬编码 ./cl_dataset/GQA）",
+      "scripts/CoIN_Replay/coin_lib.py：eval_path_audit（训练前门禁，CLI eval-path-audit）",
+      "scripts/CoIN_Replay/run_replay_exp.sh：训练前调用门禁；训练/评估分阶段标记 .round<j>_train_done",
+      "scripts/CoIN_Replay/tests/test_eval_path_gate.py（新）：把实踩 bug 改回去必须被拦下的回归用例",
+      "scripts/CoIN_Replay/tests/test_orchestrator_dryrun.py：门禁 PASS、fail-fast、恢复不重训、标记不可轻信 四类用例",
+      "run_replay_exp.sh 缺陷修正：门禁 PASS 输出用 head 截断会触发 SIGPIPE（脚本 set -euo pipefail）导致后续静默退出，已改为不截断"
+    ],
+    "local_tests_after_fix": "161 tests / 0 fail / 0 error / 18 skip（本地零依赖；torch 与 PIL 用例云端执行）"
+  },
+  "provenance": {
+    "audit_scripts_sha256": {
+      "audit1_tests_and_compat.sh": "817c841bbb81cc6548f017bb222ccf3ba6d36a69bcf0dba21a0f39324b5a6124",
+      "audit2_preflight.sh": "addfe6b0cec599a3e276b06c39dd20928a7f874b8b6855927947ca55b7e25bdd",
+      "audit3_nested.sh": "53580c8cb79458feaa42cf52fb154929e9b7724765609a4ecc2d09d7595dc128",
+      "audit4_gpu_smoke.sh": "dbe31ff93e19e5e32fedd81a7883c786af2c10344ac6a9da8a0939493810e57f",
+      "audit5_prelaunch_checks.sh": "5726c23a0d1a831cdaf7b3e8ce2260fe3fc9476cb21e703c670b52898271ea49",
+      "audit7_storage.sh": "546f5ebf55b39972cd8efc01e87d2ea12931775757d7f9fdd97101224f170399",
+      "finalize_assemble_r010.sh": "4292754059f5edcad50dc90cc0887891095666e4054ff25c3b4d3efbbe9a18dd",
+      "launch_r010_run_0001.sh": "3cdab27495680ca2d29843e8cfa56021b8543a53adf05493aab973931124a518",
+      "compat_config_hash.py": "662bee9c3ad8c06cc7e822d6cd2649f961f8e1737230db098bc89e4590b151eb",
+      "print_nested_report.py": "e6055bb31fe7baf2b2ff5bf8e1e5ea8aae6908684d8d27daa6ffb20f6acfc010"
+    },
+    "raw_logs_location": "/root/data/coin/logs/r010_prelaunch/（云端；原始日志不入库，仅保留结论与命令名）",
+    "sanitization": "本文件与 EXECUTION_REPORT.md 不含 checkpoint/权重/完整 replay JSON/完整预测/原始日志/缓存；不含任何凭据。"
+  }
+}

@@ -6,15 +6,15 @@
   "audited_commit_prev": "9e252184ad1286759b79c130d0fc385405a80fb0 (ratio 通用化重构)",
   "audit_scope_note": "审计覆盖 ratio 通用化后的全部代码路径（0.01/0.10 gate、finalize、registry、嵌套校验）；正式 run 的运行代码 = 41abc5a，云端 checkout 精确一致。原始日志与完整输出不入库。",
   "cloud": {
-    "instance": "ebcloud ssh-cn-huabei1.ebcloud.com:30267 (root)",
-    "worktree": "/root/data/coin/project_generic",
+    "instance": "<cloud-host>:<port>（实例已释放）",
+    "worktree": "<workspace-root>/project_generic",
     "checkout_commit": "41abc5af222ba5eed7c6d25edab4a2bb2d110bcc",
     "checkout_exact": true,
     "gpu": "4x NVIDIA A100-SXM4-80GB（审计开始时 4 卡空闲 0% util）",
-    "disk": "/root/data 1.0T 卷：532G used / 493G avail（52%），inode 使用 24%",
+    "disk": "<workspace-root> 1.0T 卷：532G used / 493G avail（52%），inode 使用 24%",
     "shm": "200G tmpfs",
-    "run_root": "/root/data/coin/formal/r010_run_0001_seed_358341059",
-    "log_dir": "/root/data/coin/logs/r010_prelaunch/"
+    "run_root": "<run-root>",
+    "log_dir": "<log-root>/"
   },
   "tests": [
     {
@@ -57,7 +57,7 @@
     {
       "item": "0.01 ⊆ 0.10 嵌套/严格前缀",
       "result": "PASS",
-      "evidence": "0.01 selected_indices 为 0.10 的严格前缀；k=floor(N×ratio)：ScienceQA 1272（N=12721）、TextVQA 3460（34602）、ImageNet 12983（129835）；round 总量 0.10 = 1272 / 4732 / 17715，0.01 = 127 / 473 / 1771；sampling_algorithm 两侧均为 sha256_task_seed_python_shuffle_v1"
+      "evidence": "0.01 selected_indices 为 0.10 的严格前缀；k=floor(N×ratio)：ScienceQA 1272（N=12726）、TextVQA 3460（N=34602）、ImageNet 12983（N=129833）；round 总量 0.10 = 1272 / 4732 / 17715，0.01 = 127 / 473 / 1771；sampling_algorithm 两侧均为 sha256_task_seed_python_shuffle_v1"
     },
     {
       "item": "4×GPU NCCL + flash-attn + bf16 smoke",
@@ -87,7 +87,7 @@
   ],
   "storage_audit": {
     "verified_at": "2026-09-11（实例已释放，2026-09-12 未能再次核验）",
-    "volume": "/root/data 1.0T",
+    "volume": "<workspace-root> 1.0T",
     "used_gb": 532,
     "avail_gb": 493,
     "inode_used_pct": 24,
@@ -109,13 +109,13 @@
         "risk": "不参与指标/加载链/验收；删除后失去中途恢复能力，只能重训再生"
       },
       {
-        "path": "/root/data/coin/project/checkpoints",
+        "path": "<workspace-root>/project/checkpoints",
         "size_gb": 288,
         "purpose": "prefix 历史探索 ckpt",
         "risk": "legacy prefix baseline，需用户单独决定"
       },
       {
-        "path": "/root/data/coin/tmp 残留",
+        "path": "<workspace-root>/tmp 残留",
         "size_gb": "<0.1",
         "purpose": "中间产物"
       }
@@ -151,7 +151,17 @@
       "compat_config_hash.py": "662bee9c3ad8c06cc7e822d6cd2649f961f8e1737230db098bc89e4590b151eb",
       "print_nested_report.py": "e6055bb31fe7baf2b2ff5bf8e1e5ea8aae6908684d8d27daa6ffb20f6acfc010"
     },
-    "raw_logs_location": "/root/data/coin/logs/r010_prelaunch/（云端；原始日志不入库，仅保留结论与命令名）",
-    "sanitization": "本文件与 EXECUTION_REPORT.md 不含 checkpoint/权重/完整 replay JSON/完整预测/原始日志/缓存；不含任何凭据。"
+    "raw_logs_location": "<log-root>/（云端；原始日志不入库，仅保留结论与命令名）",
+    "sanitization": "本文件与 EXECUTION_REPORT.md 已脱敏：云主机/端口、工作区与日志绝对路径一律用 <cloud-host> / <workspace-root> / <run-root> / <log-root> 占位；不含 checkpoint/权重/完整 replay JSON/完整预测/原始日志/缓存；不含任何凭据。"
+  },
+  "cloud_reverify_required": {
+    "status": "PENDING（需重新开实例；本机线程无法执行）",
+    "why": "2026-09-12 的修复提交（bad0e3c）只跑了本地零依赖套件；正式运行代码 41abc5a 的 146 tests/0 skip 不能覆盖新代码",
+    "checklist": [
+      "完整云环境 run_tests.sh：161 tests，torch 与 PIL 用例必须 0 skip",
+      "coin_lib.py eval-path-audit（门禁自身在真实路径下 PASS）",
+      "四任务最小真实评估（8 题级）跑通并校验产物",
+      "DRY_RUN 恢复测试：训练完成 + 评估失败 → 恢复只重做评估（test_train_marker_skips_retrain_after_eval_failure）"
+    ]
   }
 }

@@ -39,6 +39,21 @@ LLaVA-1.5-7B + LoRA(r=192/α=256)，任务序 ScienceQA → TextVQA → ImageNet
 - 配对比较一律**按 seed 取交集**（`random_replay_pair.py`），禁止按 run_number 猜测配对；
   未配对 run 标记 UNPAIRED，不参与配对均值。
 
+## 文档权威层级与自查（防止同一数字多处漂移）
+
+```
+权威机器数据      <series>/index.json（+ runs/<run_id>/summary.json）
+                  paired_comparison.json
+自动生成展示      本目录各系列 README 的状态行与 registry 表、PAIRED_REPORT.md
+人工说明          本文件（总入口）、SERIES_REPORT.md / EXECUTION_REPORT.md / PRELAUNCH_AUDIT.json
+活动分支根 README + 默认分支 README   只做稳定导航，不写指标
+```
+
+- push 前 / 门禁自查：`python3 scripts/CoIN_Replay/tools/random_replay_sync_check.py`
+  （读数一致性 + 配对产物重算 + 相对链接 + 脱敏扫描；已接入 `run_tests.sh` 步骤 A7）。
+- 本文件中的系列计数与指标、系列 README 的状态表均由该工具与 registry 工具校验；
+  若与 `index.json` 不一致，工具会直接 FAIL——**不要手改数字，改 registry**。
+
 ## 工具（`scripts/CoIN_Replay/tools/`）
 
 | 工具 | 作用 |

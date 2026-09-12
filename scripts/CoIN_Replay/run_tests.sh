@@ -61,6 +61,15 @@ else
     echo "  云端完整依赖环境必须真实执行这些用例，不得把 skip 计为通过"
 fi
 
+echo "==== [A7] random 系列文档一致性 + 脱敏扫描（push 前自查） ===="
+# 权威数据 = index.json / paired_comparison.json；README 状态表与总入口数字必须与之同步。
+# legacy 例外（r001 已发布审核文档）只 warn；--strict 可升级为 FAIL。
+if ! "$PY" "$ROOT/scripts/CoIN_Replay/tools/random_replay_sync_check.py" \
+        --repo-root "$ROOT" | tail -30; then
+    echo "FAIL random_replay_sync_check（README/registry 漂移或新增文档未脱敏）"
+    FAIL=1
+fi
+
 echo "=================================================="
 if [ "$FAIL" -eq 0 ]; then
     echo "门禁 A 全部通过"

@@ -45,6 +45,8 @@ sha256 与日志位置）。要点：
 - 测试：云端完整依赖 **146 tests / 0 fail / 0 error / 0 skip**（370.5 s，@ `41abc5a`）；本地零依赖
   146 tests / 0 fail / **18 skip**（9 torch + 9 PIL，显式门控，不计为通过）。
 - 数据：全量 preflight（无 skip-PIL）PASS，`data_sha256=30a878a2…`，四任务 missing=0 / corrupt=0。
+- 样本量口径：N 取**真实发布产物/全量 preflight** 值（ScienceQA 12726、TextVQA 34602、ImageNet 129833、
+  GQA 72140）；任务书早期文本中的 12721/129835 为旧值，勿沿用（k 与 round 总量不受影响）。
 - 嵌套：0.01 与 0.10 分别从真实源数据独立重建，**A/B 逐字节一致**、**0.01 是 0.10 的严格前缀**，
   k = 1272 / 3460 / 12983，round 总量 1272 / 4732 / 17715（0.01 为 127 / 473 / 1771）。
 - 硬件/训练栈：4×A100 NCCL + flash-attn + bf16 smoke、DS ZeRO-3 真实更新 smoke、最小真实评估
@@ -76,7 +78,7 @@ HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_na
 - **round1 的处理：重新训练并覆盖，未复用 checkpoint。** 依据：崩溃发生在 round1 的**评估**阶段，
   此前 round1 无任何完成标记（既无 `.round1_done`，也无当时尚不存在的训练段标记），编排器按设计
   重新执行 `train_one round1_ScienceQA_task`，输出目录与首轮相同
-  （`checkpoints/CoIN_Replay/r010/run_0001_seed_358341059/round1_task_llava_lora`），**同名覆盖**；
+  （`checkpoints/CoIN_Replay_random/r010/run_0001_seed_358341059/round1_task_llava_lora`），**同名覆盖**；
   日志中 15:26:14 出现 `[train:round1_ScienceQA_task] 启动` 亦与之一致。
 - 限制与说明：该结论基于当次编排日志与编排器语义；云端实例随后已释放（`2026-09-12` 复核端口不可达），
   无法再读取首轮 ckpt 的 mtime 佐证。**指标未受污染的独立证据**：最终 7 个 ckpt 通过参数级 finite
@@ -101,10 +103,10 @@ HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_na
 
 ## 5. 存储与清理清单（只报告，不实际删除）
 
-审计时（2026-09-11）：`/root/data` 1.0T 卷 **532G used / 493G avail（52%）**，inode 24%，shm 200G tmpfs。
+审计时（2026-09-11）：`<workspace-root>` 1.0T 卷 **532G used / 493G avail（52%）**，inode 24%，shm 200G tmpfs。
 
 - 必须保留：`datasets` 44G、`models` 15G、`conda` 5.7G、r001 五个 run（各 6.6G）、r010 run 144G、导出六件套 36K、审计日志 3.5M。
-- 可安全清理候选（需授权，未执行）：r010 run 下 7 个 `checkpoint-*` HF 单 epoch 存档（约 140G，不参与指标/加载链/验收，删除后失去中途恢复能力）；`/root/data/coin/project/checkpoints` 288G（prefix 历史探索产物，建议单独决定）；`/root/data/coin/tmp` 残留（<0.1G）。
+- 可安全清理候选（需授权，未执行）：r010 run 下 7 个 `checkpoint-*` HF 单 epoch 存档（约 140G，不参与指标/加载链/验收，删除后失去中途恢复能力）；`<workspace-root>/project/checkpoints` 288G（prefix 历史探索产物，建议单独决定）；`<workspace-root>/tmp` 残留（<0.1G）。
 - 状态不明、禁止自动处理：`tmp` 下未归类的历史脚本/JSON、本地两份历史笔记。
 
 ## 6. 统计勘误与口径说明
@@ -124,8 +126,23 @@ HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_na
 
 ## 7. 证据来源与脱敏
 
-- 结论证据：云端审计日志与输出 `/root/data/coin/logs/r010_prelaunch/`（命令名 + 结论已入
+- 结论证据：云端审计日志与输出 `<log-root>/`（命令名 + 结论已入
   [PRELAUNCH_AUDIT.json](PRELAUNCH_AUDIT.json)，原始日志不入库）；审计脚本 sha256 同见该文件。
 - 提交级证据：A/C/D 三个 commit 及六件套文件可在 GitHub 直接读取；`summary.json.repro` 内含五个
   发布文件的 sha256。
-- 本文件与 JSON 均已脱敏：无凭据、无 checkpoint/权重/完整 replay JSON/完整预测/原始日志/缓存。
+- 本文件与 JSON 均已脱敏：云主机/端口、工作区与日志绝对路径一律用 `<cloud-host>` / `<workspace-root>` / `<run-root>` / `<log-root>` 占位；无凭据、无 checkpoint/权重/完整 replay JSON/完整预测/原始日志/缓存。
+
+## 8. 下一次正式实验前的云环境复验清单（PENDING，2026-09-12）
+
+本节修复（提交 `bad0e3c`）目前**只有本地零依赖验证**（161 tests / 0 fail / 18 skip）。正式运行代码
+`41abc5a` 的「146 tests / 0 skip」不能覆盖新代码，因此下次开实例后、正式启动前必须执行：
+
+1. 完整云环境 `bash scripts/CoIN_Replay/run_tests.sh` —— **161 tests，torch 与 PIL 用例必须 0 skip**；
+2. `python3 scripts/CoIN_Replay/coin_lib.py eval-path-audit --root <repo> --model-base <模型> --image-folder <图片根>`
+   —— 门禁在真实路径下 PASS（并故意改坏一处验证 fail-fast）；
+3. 四任务最小真实评估（8 题级）跑通并校验产物；
+4. DRY_RUN 恢复测试：训练完成 + 评估失败 → 恢复只重做评估、不重训 task 段
+   （`test_train_marker_skips_retrain_after_eval_failure`）。
+
+自查工具：`tools/random_replay_sync_check.py`（registry/README/配对报告一致性 + 脱敏扫描），已接入
+`run_tests.sh` 门禁，push 前应先跑。
